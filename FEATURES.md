@@ -96,6 +96,48 @@ Add `app_meta(key, value)` k/v table so we can persist things like `pandoc_path`
 
 ---
 
+## 3b. PDF add-in (opt-in, not bundled) · **M**
+
+### Why it matters
+Good PDF→EPUB conversion needs either pandoc (already detect-and-prompt) or a heavy ML stack (Docling ~2GB, Marker similar). Bundling a low-quality Rust-native fallback would set a misleading default and bloat the binary. Per BRIEF §4: **no PDF converter ships with Atlas.** PDF support is an opt-in add-in, surfaced through the import UI rather than hidden in settings.
+
+### User flow
+- **Default state:** the "Import PDF" / drag-drop PDF affordance is **visible but disabled** (greyed). Tooltip: "PDF support requires an add-in."
+- **Click the disabled button** → route to **Settings → Add-ins → PDF Conversion** (don't open a modal mid-import — the install is a real decision, deserves its own screen).
+- The PDF Conversion add-in page lists available backends in quality order, with size/license cost:
+  1. **Pandoc** — ~150MB, MIT, basic quality. Fastest install. `brew/winget/apt`.
+  2. **Docling** — ~2GB, MIT, high quality, structure-preserving. `pipx install docling` (prompts for pipx first if missing).
+  3. (Future) **Marker** — flagged GPL-3.0 + non-commercial model weights; only if user explicitly accepts.
+- After install, Atlas re-detects and the PDF import affordance enables. Toast: "PDF import ready (via Pandoc)."
+- Dragging a PDF onto Atlas with no add-in installed: same disabled-state behavior — toast "PDF support not installed" + a button "Set up PDF support" routing to the same screen. Don't silently reject.
+
+### Technical sketch
+- Extend the `Converter` trait registry from §3 with detection state per backend:
+  ```rust
+  enum PdfBackend { Pandoc, Docling, Marker }
+  struct PdfBackendStatus { backend: PdfBackend, available: bool, version: Option<String>, path: Option<String> }
+  fn detect_pdf_backends() -> Vec<PdfBackendStatus>  // cached, refreshed after install
+  fn best_pdf_backend() -> Option<PdfBackend>        // highest-quality installed
+  ```
+- Frontend gates the PDF import button on `best_pdf_backend().is_some()`.
+- IPC: `install_pdf_backend(backend, method) -> AsyncJob` mirroring `install_pandoc`.
+- Persist chosen backend in `app_meta` (`pdf_backend = "docling"`); user can override in add-in settings.
+- Docling install: detect `pipx` → install if missing → `pipx install docling` → resolve binary path. Shell-out to `docling --version` for verification.
+
+### Schema changes
+None beyond §3's `app_meta` table. New keys: `pdf_backend`, `docling_path`.
+
+### Risks
+- Docling install can fail in many ways (no Python, no pipx, network, disk space). Surface clear errors with copyable commands as fallback.
+- Tempting to "just bundle a tiny fallback" later — resist. The disabled-button-with-explanation is the honest UX. Reverse only if a Rust-native parser reaches genuinely-good quality.
+- Marker's license is a landmine; do not enable it without an explicit accept-and-confirm flow citing the non-commercial clause.
+
+### Out of scope here
+- In-app PDF rendering (never — see BRIEF §4).
+- Scanned-PDF OCR (deferred; suggest `ocrmypdf` in the refusal toast).
+
+---
+
 ## 4. Kepubify + export pipeline · **S**
 
 ### Why it matters

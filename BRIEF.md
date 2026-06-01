@@ -48,11 +48,15 @@ Comfortably under the 30MB target.
 
 ## 4. PDF handling
 
-On import:
+**No PDF converter is bundled.** PDF import is an opt-in add-in, consistent with the detect-and-prompt model used for pandoc. The Import PDF action is visible but disabled by default — clicking it navigates the user to the add-in install screen rather than silently failing or attempting a low-quality conversion.
+
+On import (once a converter add-in is installed):
 
 1. Detect text-based vs scanned (try text extraction; <100 chars/page avg → scanned).
-2. **Text-based:** convert to EPUB using `pdf-extract` + HTML generation (Rust-native), or pandoc if available for higher quality. Original kept as `<book>.original.pdf` sidecar.
+2. **Text-based:** convert to EPUB via the installed converter (pandoc, Docling, or future Rust-native). Original kept as `<book>.original.pdf` sidecar.
 3. **Scanned:** refuse politely. Suggest `ocrmypdf` or similar, re-import.
+
+**Rationale:** PDF→EPUB done well requires either a heavy ML stack (Docling, Marker — GB-class) or pandoc (already detect-and-prompt). Bundling a low-quality Rust-native fallback would set a misleading default. Better to be explicit: PDF is a second-class input, opt in.
 
 Send-to-device: PDF-preferring devices (reMarkable) get the original PDF sidecar; everything else gets the EPUB or its conversion.
 
@@ -102,7 +106,7 @@ LibraryRoot/
 ## 6. v1 feature scope
 
 1. **Library:** drag-drop import, watch folder (index-in-place / copy / copy-and-organize), hash dedup, cover extraction, bulk ops.
-2. **Import pipeline:** EPUB native; PDF→EPUB (text only); mobi/azw3/docx/html/md via pandoc-if-available.
+2. **Import pipeline:** EPUB native; PDF→EPUB requires PDF add-in (disabled-with-prompt by default); mobi/azw3/docx/html/md via pandoc-if-available.
 3. **Metadata:** Open Library (primary) + Google Books (fallback), cached. Manual editing. "Identify" action. Series detection (OPF → ISBN → filename).
 4. **Reading:** foliate-js. Paginated + scrolling. Font/size/line-height/margins/theme. Theme overrides publisher color CSS, preserves structure. Keyboard nav; vim keys optional.
 5. **Annotations:** CFI-addressed highlights + notes, 5 colors, cross-library search, export to Markdown (Readwise format) or JSON.
@@ -123,7 +127,7 @@ Visual reference points: Linear, Things, iA Writer.
 
 1. **Foundation** — Rust core, SQLite, Tauri shell, library grid. *Goal: 1,000 EPUBs imported and browsable.*
 2. **Reading** — foliate-js, themes, progress.
-3. **Import pipeline** — PDF→EPUB, pandoc detection.
+3. **Import pipeline** — pandoc detection, PDF add-in detection (PDF support opt-in, not bundled).
 4. **Enrichment** — ISBN lookup, editing, series detection, cover refresh.
 5. **Annotations + smart collections** — shared query layer.
 6. **CLI.**
