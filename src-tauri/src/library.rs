@@ -49,7 +49,18 @@ pub struct ImportReport {
     pub errors: Vec<String>,
 }
 
-const BOOK_SELECT: &str = "
+/// `description` is the one per-book blob that can run to kilobytes. The
+/// library list never renders it (the detail panel refetches via
+/// `get_book`), so `list_books` selects NULL in its place to keep the
+/// startup IPC payload small at large library sizes.
+fn book_select(with_description: bool) -> String {
+    let desc = if with_description {
+        "b.description"
+    } else {
+        "NULL"
+    };
+    format!(
+        "
     SELECT b.id, b.title, b.series_index, b.cover_path, b.language, b.pub_date, b.added_at,
            s.name AS series_name,
            COALESCE((SELECT GROUP_CONCAT(a.name, '||')
@@ -58,7 +69,7 @@ const BOOK_SELECT: &str = "
                      WHERE ba.book_id = b.id
                      ORDER BY ba.position), '') AS authors,
            (SELECT path FROM files WHERE book_id = b.id AND role = 'canonical' LIMIT 1) AS file_path,
-           b.isbn, b.description,
+           b.isbn, {desc} AS description,
            rp.percent, rp.cfi,
            b.finished_at,
            COALESCE((SELECT GROUP_CONCAT(t.name, '||')
@@ -73,7 +84,9 @@ const BOOK_SELECT: &str = "
     FROM books b
     LEFT JOIN series s ON s.id = b.series_id
     LEFT JOIN reading_progress rp ON rp.book_id = b.id
-";
+"
+    )
+}
 
 fn map_book(row: &rusqlite::Row) -> rusqlite::Result<BookRow> {
     let authors_str: String = row.get(8)?;
@@ -134,7 +147,10 @@ fn map_book(row: &rusqlite::Row) -> rusqlite::Result<BookRow> {
 
 pub fn list_books(pool: &DbPool) -> Result<Vec<BookRow>> {
     let conn = pool.get()?;
-    let sql = format!("{} ORDER BY b.title_sort COLLATE NOCASE", BOOK_SELECT);
+    let sql = format!(
+        "{} ORDER BY b.title_sort COLLATE NOCASE",
+        book_select(false)
+    );
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt
         .query_map([], map_book)?
@@ -144,7 +160,7 @@ pub fn list_books(pool: &DbPool) -> Result<Vec<BookRow>> {
 
 pub fn get_book(pool: &DbPool, book_id: i64) -> Result<Option<BookRow>> {
     let conn = pool.get()?;
-    let sql = format!("{} WHERE b.id = ?1", BOOK_SELECT);
+    let sql = format!("{} WHERE b.id = ?1", book_select(true));
     let row = conn
         .query_row(&sql, [book_id], map_book)
         .map(Some)
@@ -175,52 +191,67 @@ pub fn import_paths(
     library_root: &Path,
     paths: &[PathBuf],
 ) -> ImportReport {
-    let mut report = ImportReport::default();
+    // Expand directories up front so the parallel stage sees a flat file list.
+    let mut files: Vec<PathBuf> = Vec::new();
     for p in paths {
         if p.is_dir() {
             for entry in walkdir::WalkDir::new(p).into_iter().filter_map(|e| e.ok()) {
                 if entry.file_type().is_file() {
-                    import_one(&mut report, pool, covers_dir, library_root, entry.path());
+                    files.push(entry.path().to_path_buf());
                 }
             }
         } else if p.is_file() {
-            import_one(&mut report, pool, covers_dir, library_root, p);
+            files.push(p.clone());
+        }
+    }
+
+    // Hashing and EPUB parsing dominate import time, so files run in
+    // parallel. SQLite writes serialize on the WAL writer (busy_timeout in
+    // db::open), and the copy_lock keeps unique_path() allocation atomic so
+    // two same-titled books can't race to the same destination file.
+    let copy_lock = std::sync::Mutex::new(());
+    let results: Vec<Result<ImportOutcome>> = {
+        use rayon::prelude::*;
+        files
+            .par_iter()
+            .filter_map(|path| import_one(pool, covers_dir, library_root, &copy_lock, path))
+            .collect()
+    };
+
+    let mut report = ImportReport::default();
+    for res in results {
+        match res {
+            Ok(ImportOutcome::Imported) => report.imported += 1,
+            Ok(ImportOutcome::Duplicate) => report.skipped += 1,
+            Err(e) => {
+                report.failed += 1;
+                report.errors.push(e.to_string());
+            }
         }
     }
     report
 }
 
 /// EPUB-only import. Other extensions get a clear unsupported error;
-/// no extension at all (folder artifacts) is silently skipped.
+/// no extension at all (folder artifacts) is silently skipped (None).
 fn import_one(
-    report: &mut ImportReport,
     pool: &DbPool,
     covers_dir: &Path,
     library_root: &Path,
+    copy_lock: &std::sync::Mutex<()>,
     path: &Path,
-) {
+) -> Option<Result<ImportOutcome>> {
     if is_epub(path) {
-        apply_import_result(report, import_single(pool, covers_dir, library_root, path));
-        return;
+        return Some(import_single(pool, covers_dir, library_root, copy_lock, path));
     }
     let ext = path.extension().and_then(OsStr::to_str).unwrap_or("");
-    if !ext.is_empty() {
-        report.failed += 1;
-        report.errors.push(format!(
+    if ext.is_empty() {
+        None
+    } else {
+        Some(Err(AtlasError::Msg(format!(
             "{}: only .epub is supported for import",
             path.display()
-        ));
-    }
-}
-
-fn apply_import_result(report: &mut ImportReport, res: Result<ImportOutcome>) {
-    match res {
-        Ok(ImportOutcome::Imported) => report.imported += 1,
-        Ok(ImportOutcome::Duplicate) => report.skipped += 1,
-        Err(e) => {
-            report.failed += 1;
-            report.errors.push(e.to_string());
-        }
+        ))))
     }
 }
 
@@ -240,6 +271,7 @@ fn import_single(
     pool: &DbPool,
     covers_dir: &Path,
     library_root: &Path,
+    copy_lock: &std::sync::Mutex<()>,
     path: &Path,
 ) -> Result<ImportOutcome> {
     let source = fs::canonicalize(path)?;
@@ -265,6 +297,9 @@ fn import_single(
     let canonical = if source.starts_with(library_root) {
         source.clone()
     } else {
+        // unique_path() probes the filesystem, so allocation+copy must be
+        // atomic across parallel importers of same-titled books.
+        let _guard = copy_lock.lock().unwrap();
         let dest = organized_path(library_root, &meta);
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)?;
@@ -286,7 +321,9 @@ fn import_single(
 
     let tx = conn.unchecked_transaction()?;
 
-    tx.execute(
+    // Two parallel importers can both pass the dedup probe above before
+    // either commits; the UNIQUE(content_hash) constraint is the arbiter.
+    let insert = tx.execute(
         "INSERT INTO books (title, title_sort, isbn, pub_date, language, description, cover_path, content_hash)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         rusqlite::params![
@@ -299,7 +336,18 @@ fn import_single(
             cover_path,
             hash,
         ],
-    )?;
+    );
+    match insert {
+        Err(rusqlite::Error::SqliteFailure(f, ref msg))
+            if f.code == rusqlite::ErrorCode::ConstraintViolation
+                && msg.as_deref().is_some_and(|m| m.contains("content_hash")) =>
+        {
+            return Ok(ImportOutcome::Duplicate);
+        }
+        other => {
+            other?;
+        }
+    }
     let book_id = tx.last_insert_rowid();
 
     for (pos, author) in meta.authors.iter().enumerate() {

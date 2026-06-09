@@ -156,7 +156,12 @@ pub fn open(path: &Path) -> Result<DbPool> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let manager = SqliteConnectionManager::file(path);
+    // foreign_keys is per-connection (the PRAGMA in SCHEMA only covers the
+    // connection that runs it), and busy_timeout lets concurrent importers
+    // wait for the WAL writer instead of failing with SQLITE_BUSY.
+    let manager = SqliteConnectionManager::file(path).with_init(|c| {
+        c.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")
+    });
     let pool = Pool::builder().max_size(8).build(manager)?;
     let conn = pool.get()?;
     conn.execute_batch(SCHEMA)?;
