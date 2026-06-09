@@ -1350,6 +1350,15 @@ kbd, .kbd {
   gap: 16px 12px;
 }
 .grid-compact .meta { display: none; }
+
+/* Invisible IntersectionObserver target that triggers the next render
+   batch in BookGrid/BookList. Spans the full row so it's hit no matter
+   which column the last card lands in. */
+.grid-sentinel {
+  grid-column: 1 / -1;
+  height: 1px;
+}
+
 .grid-compact .cover {
   box-shadow:
     0 2px 8px rgba(0,0,0,0.3),

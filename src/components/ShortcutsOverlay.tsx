@@ -1,42 +1,6 @@
 import { useEffect } from "react";
 import { X } from "lucide-react";
-
-const isMac =
-  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-const MOD = isMac ? "⌘" : "Ctrl";
-
-const GROUPS: { name: string; items: { keys: string; label: string }[] }[] = [
-  {
-    name: "Navigation",
-    items: [
-      { keys: `${MOD} K`, label: "Open command palette" },
-      { keys: "/", label: "Focus filter" },
-      { keys: "g l", label: "Go to library" },
-      { keys: "g s", label: "Go to settings" },
-      { keys: "?", label: "Show shortcuts" },
-      { keys: "Esc", label: "Close overlay / back" },
-    ],
-  },
-  {
-    name: "Library",
-    items: [
-      { keys: "v", label: "Cycle view (grid · compact · list)" },
-      { keys: "s", label: "Open sort menu" },
-      { keys: `${MOD} I`, label: "Import files" },
-      { keys: `${MOD} ⇧ I`, label: "Import folder" },
-      { keys: "t", label: "Cycle theme" },
-    ],
-  },
-  {
-    name: "Reader",
-    items: [
-      { keys: "← / →", label: "Previous / next page" },
-      { keys: "Space", label: "Next page" },
-      { keys: "j / k", label: "Next / previous page" },
-      { keys: "Esc", label: "Close reader" },
-    ],
-  },
-];
+import { HELP_GROUPS } from "../shortcuts";
 
 interface Props {
   open: boolean;
@@ -68,7 +32,7 @@ export function ShortcutsOverlay({ open, onClose }: Props) {
           </button>
         </header>
         <div className="shortcuts-grid">
-          {GROUPS.map((g) => (
+          {HELP_GROUPS.map((g) => (
             <section key={g.name}>
               <div className="shortcuts-group-title">{g.name}</div>
               {g.items.map((item) => (
