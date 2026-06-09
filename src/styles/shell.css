@@ -1,0 +1,50 @@
+/* ===== Shell ===== */
+.atlas-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  height: 100vh;
+  background: var(--bg);
+}
+
+/* Respect prefers-reduced-motion: kill the longer / decorative motion.
+   Short functional transitions (focus rings, popover open) stay so the UI
+   stays legible. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* Book3D idle drift checks data-flourishes; main.tsx sets it from the media query. */
+
+/* Native-style soft focus ring. Hard outlines were already disabled across
+   the app; this restores accessible focus for keyboard users using a soft
+   glow that matches macOS/Windows accent treatment instead of a 2px line. */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb, var(--accent-base-rgb)), 0.35),
+              0 0 0 1px rgba(var(--accent-rgb, var(--accent-base-rgb)), 0.6);
+  transition: box-shadow 140ms var(--ease, ease-out);
+  border-radius: inherit;
+}
+/* Suppress the ring on draggable surfaces and the title-bar strip. */
+.titlebar-drag:focus-visible,
+[data-tauri-drag-region]:focus-visible {
+  box-shadow: none;
+}
+
+/* Window dragging is wired via data-tauri-drag-region on the sidebar and
+   each view's <header>; no overlay strip needed. Children with their own
+   click handlers still work — Tauri only drags when the mousedown target
+   is the element with the attribute. Settings has no native header so it
+   carries its own thin titlebar drag strip. */
+.settings-titlebar {
+  position: sticky;
+  top: 0;
+  height: 38px;
+  flex-shrink: 0;
+}
+/* Sidebar padding-top lives in the canonical .sidebar rule below — putting
+   it here would be clobbered by the padding shorthand. */

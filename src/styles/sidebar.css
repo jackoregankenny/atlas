@@ -1,0 +1,440 @@
+/* ===== Sidebar ===== */
+.sidebar {
+  background: var(--bg-elev);
+  border-right: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  /* top padding clears the macOS overlay titlebar / traffic lights (≈28px) */
+  padding: 40px 8px 10px;
+  gap: 2px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 2px 10px 12px;
+  letter-spacing: -0.01em;
+}
+.brand-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px var(--accent-ring);
+}
+
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px;
+  margin: 0 0 8px;
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  color: var(--muted);
+  font-size: 12px;
+  border-radius: 6px;
+  justify-content: flex-start;
+}
+.sidebar-search {
+  transition:
+    background var(--t-base) var(--ease),
+    border-color var(--t-base) var(--ease),
+    color var(--t-base) var(--ease),
+    transform var(--t-base) var(--spring-soft);
+}
+.sidebar-search:hover:not(:disabled) {
+  background: var(--panel-hover);
+  border-color: var(--border);
+  color: var(--text);
+  transform: translateY(-1px);
+}
+.sidebar-search > span:first-of-type {
+  flex: 1;
+  text-align: left;
+}
+.sidebar-search .kbd {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  background: var(--bg);
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sidebar nav button {
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+  justify-content: flex-start;
+  font-size: 12.5px;
+  gap: 9px;
+  position: relative;
+  transition:
+    background var(--t-base) var(--ease),
+    color var(--t-base) var(--ease),
+    transform var(--t-base) var(--spring-soft);
+}
+.sidebar nav button > span:first-of-type {
+  flex: 1;
+}
+.sidebar nav button.active {
+  color: var(--text);
+}
+/* The active background lives in .active-pill so it can slide between
+   buttons. The pill is rendered by HoverPill and uses var(--accent-soft). */
+.sidebar nav button.active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px var(--accent-ring);
+}
+.sidebar nav button.active svg { color: var(--accent); }
+.sidebar nav button:not(.active) svg {
+  color: var(--muted);
+  transition: color var(--t-base) var(--ease), transform var(--t-base) var(--spring);
+}
+.sidebar nav button:hover:not(.active) {
+  color: var(--text);
+}
+.sidebar nav button:hover:not(.active) svg {
+  color: var(--text-dim);
+  transform: scale(1.06);
+}
+
+/* ===== Chasing hover pill ===== */
+.hover-pill-wrap {
+  position: relative;
+}
+.hover-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background: var(--hover-wash);
+  border-radius: var(--r-sm);
+  opacity: 0;
+  z-index: 0;
+  will-change: transform, width, height, opacity;
+  transition:
+    transform 0.38s var(--spring-soft),
+    width 0.38s var(--spring-soft),
+    height 0.38s var(--spring-soft),
+    opacity 0.18s var(--ease);
+}
+.hover-pill.visible { opacity: 1; }
+
+.active-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background: var(--accent-soft);
+  border-radius: var(--r-sm);
+  z-index: 0;
+  will-change: transform, width, height;
+  /* No transition before first measurement so it doesn't fly in from 0,0. */
+  transition: none;
+}
+.active-pill.ready {
+  transition:
+    transform 0.32s var(--spring-soft),
+    width 0.32s var(--spring-soft),
+    height 0.32s var(--spring-soft);
+}
+@media (prefers-reduced-motion: reduce) {
+  .active-pill.ready { transition: none; }
+}
+
+/* Buttons sit above both pills. The :not() exclusion is critical — without
+   it this rule's higher specificity overrides their position:absolute,
+   making them flex items that shove the nav down. */
+.hover-pill-wrap > *:not(.hover-pill):not(.active-pill) { position: relative; z-index: 1; }
+.hover-pill-wrap nav button { position: relative; z-index: 1; }
+.sidebar nav .count {
+  font-size: 10.5px;
+  color: var(--muted);
+  background: var(--panel);
+  padding: 0 6px;
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  height: 16px;
+}
+.sidebar nav .active .count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0 -8px;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-section-title {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 14px 10px 4px;
+}
+.sidebar-tags button {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.sidebar-tags button svg { color: var(--muted-dim); }
+.sidebar-tags button.active svg { color: var(--accent); }
+
+/* ===== Folders ===== */
+.sidebar-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 6px;
+}
+.section-add {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: var(--muted);
+  border-radius: var(--r-xs);
+  background: transparent;
+  border: none;
+  transition: background var(--t-base) var(--ease),
+    color var(--t-base) var(--ease), transform var(--t-base) var(--spring);
+}
+.section-add:hover:not(:disabled) {
+  background: var(--hover-wash);
+  color: var(--text);
+  transform: scale(1.1);
+}
+.sidebar-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.folder-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--r-sm);
+  position: relative;
+}
+.folder-row.active .folder-main {
+  color: var(--text);
+}
+.folder-row.active .folder-main::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px var(--accent-ring);
+}
+.folder-row.active .folder-main svg { color: var(--accent); }
+.folder-main {
+  flex: 1;
+  text-align: left;
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+  color: var(--text-dim);
+  justify-content: flex-start;
+  font-size: 12px;
+  gap: 9px;
+  background: transparent;
+  border: none;
+}
+.folder-main svg { color: var(--muted); }
+.folder-main > span:first-of-type { flex: 1; }
+.folder-main .count {
+  font-size: 10.5px;
+  color: var(--muted);
+  background: var(--panel);
+  padding: 0 6px;
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  height: 16px;
+}
+.folder-row.active .folder-main .count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.folder-delete {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted-dim);
+  border-radius: var(--r-xs);
+  margin-right: 2px;
+  opacity: 0;
+  transition: opacity var(--t-base) var(--ease),
+    color var(--t-base) var(--ease), background var(--t-base) var(--ease);
+}
+.folder-row:hover .folder-delete { opacity: 1; }
+.folder-delete:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+/* ===== Collection new / edit rows ===== */
+.folder-new-row,
+.folder-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  margin: 1px 0;
+}
+.folder-new-icon {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.folder-edit-input {
+  flex: 1;
+  background: transparent;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 3px 4px !important;
+  font-size: 12px !important;
+  height: 22px;
+  border-radius: 0 !important;
+  color: var(--text);
+  min-width: 0;
+}
+.folder-edit-input:focus {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.folder-new-row:focus-within,
+.folder-edit-row:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+.folder-edit-confirm,
+.folder-edit-cancel {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-xs);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t-base) var(--ease), color var(--t-base) var(--ease);
+}
+.folder-edit-confirm {
+  color: var(--success);
+  background: transparent;
+}
+.folder-edit-confirm:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+.folder-edit-confirm:disabled {
+  color: var(--muted-dim);
+  opacity: 1;
+}
+.folder-edit-cancel {
+  color: var(--muted);
+  background: transparent;
+}
+.folder-edit-cancel:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.sidebar-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-device {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-radius: 6px;
+}
+.device-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--success) 60%, transparent);
+}
+
+.sidebar-spacer { display: none; }
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Sidebar Import — uses the soft-3D .primary look, with layout tweaks so the
+   label hugs the left and the chevron sits flush on the right. */
+.sb-import {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 7px 12px;
+}
+.sb-chevron {
+  margin-left: auto;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.78);
+}
+:root[data-theme="light"] .sb-import .sb-chevron { color: rgba(255, 255, 255, 0.9); }
+
+.sidebar-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.sb-mini {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  color: var(--muted);
+  border-radius: var(--r-sm);
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  transition:
+    background var(--t-base) var(--ease),
+    color var(--t-base) var(--ease),
+    border-color var(--t-base) var(--ease),
+    transform var(--t-base) var(--spring);
+}
+.sb-mini:hover:not(:disabled) {
+  background: var(--hover-wash);
+  color: var(--text);
+  border-color: var(--border);
+  transform: translateY(-1px);
+}
+.sb-mini:active:not(:disabled) { transform: translateY(0) scale(0.94); }

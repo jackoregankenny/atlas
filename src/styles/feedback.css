@@ -1,0 +1,83 @@
+/* ===== Drop zone ===== */
+.dropzone {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: color-mix(in srgb, var(--bg) 65%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: fadein 0.16s var(--ease);
+}
+.dropzone-inner {
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  padding: 44px 72px;
+  text-align: center;
+  background: var(--accent-soft);
+}
+.dropzone-icon {
+  color: var(--accent);
+  margin-bottom: 12px;
+  animation: bounce 1.6s ease-in-out infinite;
+}
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+.dropzone-text {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+.dropzone-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+@keyframes fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ===== Toasts ===== */
+.toast-stack {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 90;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px 9px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  animation: slideup 0.2s var(--ease);
+  max-width: 480px;
+  color: var(--text);
+}
+.toast-icon { flex: 0 0 auto; }
+.toast-success { border-color: color-mix(in srgb, var(--success) 35%, transparent); }
+.toast-success .toast-icon { color: var(--success); }
+.toast-error { border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.toast-error .toast-icon { color: var(--danger); }
+.toast-info .toast-icon { color: var(--accent); }
+@keyframes slideup {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}

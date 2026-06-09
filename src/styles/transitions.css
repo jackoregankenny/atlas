@@ -1,0 +1,43 @@
+/* ===== View Transitions ===== */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.22s;
+    animation-timing-function: cubic-bezier(0.22, 0.8, 0.28, 1);
+  }
+  ::view-transition-old(root) {
+    animation-name: vt-fadeout;
+  }
+  ::view-transition-new(root) {
+    animation-name: vt-fadein;
+  }
+  @keyframes vt-fadeout {
+    to { opacity: 0; }
+  }
+  @keyframes vt-fadein {
+    from { opacity: 0; }
+  }
+}
+
+/* ─── Flourishes off ──────────────────────────────────────────────────
+   Disables idle/decorative motion and chrome that exists purely for
+   delight. The 3D book still renders interactively; just the optional
+   layers (rim, grain, ambient shading, hero glow, hover lifts) are muted. */
+:root[data-flourishes="off"] .book3d-grain,
+:root[data-flourishes="off"] .book3d-rim,
+:root[data-flourishes="off"] .book3d-face-shade,
+:root[data-flourishes="off"] .book3d-back-emboss,
+:root[data-flourishes="off"] .book3d-front-shine { display: none !important; }
+:root[data-flourishes="off"] .book3d-stage { transition: none; }
+:root[data-flourishes="off"] .book3d-stage:hover { transform: none; }
+:root[data-flourishes="off"] .detail-hero-tint { display: none; }
+:root[data-flourishes="off"] .detail-hero-backdrop { filter: blur(48px) saturate(1.05); opacity: 0.18; }
+:root[data-flourishes="off"] .detail-cover-wrap:hover { transform: none; }
+:root[data-flourishes="off"] .quick-chip:hover { transform: none; }
+:root[data-flourishes="off"] .sb-action:hover:not(:disabled) { transform: none; }
+:root[data-flourishes="off"] .cover-picker-tile:hover:not(:disabled) { transform: none; }
+:root[data-flourishes="off"] .cover-picker-tile-check { display: none; }
+:root[data-flourishes="off"] .detail-actions button.primary:hover:not(:disabled),
+:root[data-flourishes="off"] .detail-actions button.secondary:hover:not(:disabled) { transform: none; }
+:root[data-flourishes="off"] .empty-actions button.primary:hover:not(:disabled),
+:root[data-flourishes="off"] .empty-actions button.secondary:hover:not(:disabled) { transform: none; }

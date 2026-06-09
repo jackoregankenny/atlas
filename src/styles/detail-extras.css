@@ -1,0 +1,248 @@
+/* ===== Status pill ===== */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.status-reading {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.status-finished {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+}
+
+/* (Mark-as-read finished state now handled by button.secondary.active.) */
+
+/* ===== Tags ===== */
+.tag-section { margin: 0 0 26px; }
+.tag-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.tag-section-icon {
+  color: var(--muted);
+  margin-right: 4px;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 3px 5px 3px 9px;
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 99px;
+  color: var(--text-dim);
+}
+.tag-chip-x {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tag-chip-x:hover {
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
+  color: var(--danger);
+}
+.tag-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  border-radius: 99px;
+}
+.tag-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+.tag-add svg { color: currentColor; }
+.tag-input {
+  font-size: 11px !important;
+  padding: 2px 9px !important;
+  background: var(--bg-elev);
+  border: 1px solid var(--accent) !important;
+  color: var(--text);
+  width: 140px !important;
+  border-radius: 99px !important;
+  height: 22px;
+}
+.tag-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+/* ===== Folders in detail panel ===== */
+.folder-section { margin: 0 0 18px; }
+.folder-chip-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.folder-section-icon { color: var(--muted); margin-right: 4px; }
+.folder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 3px 5px 3px 9px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--r-pill);
+  color: var(--accent);
+  font-weight: 500;
+  transition: transform var(--t-base) var(--spring-soft),
+    background var(--t-base) var(--ease);
+}
+.folder-chip:hover { transform: translateY(-1px); }
+.folder-chip-x {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+.folder-chip-x:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+.folder-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  border-radius: var(--r-pill);
+  transition: border-color var(--t-base) var(--ease),
+    color var(--t-base) var(--ease), background var(--t-base) var(--ease);
+}
+.folder-add:hover { border-color: var(--accent); color: var(--accent); }
+
+.folder-picker { min-width: 220px; padding: 4px; }
+.folder-picker-search { padding: 4px; }
+.folder-picker-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  padding: 5px 8px !important;
+  font-size: 12px !important;
+  color: var(--text);
+}
+.folder-picker-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+.folder-picker-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-xs);
+  justify-content: flex-start;
+  text-align: left;
+}
+.folder-picker-item:hover { background: var(--hover-wash); color: var(--text); }
+.folder-picker-name { flex: 1; }
+.folder-picker-count {
+  font-size: 10.5px;
+  color: var(--muted);
+  background: var(--panel);
+  padding: 0 6px;
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  height: 16px;
+}
+.folder-picker-create-row { color: var(--accent); }
+.folder-picker-create-row svg { color: var(--accent); }
+
+/* ===== Detail panel stagger + polish ===== */
+@media (prefers-reduced-motion: no-preference) {
+  .detail-panel.open .detail-body > * {
+    animation: detail-rise 0.42s var(--ease) both;
+  }
+  .detail-panel.open .detail-body > .detail-hero { animation-delay: 0.02s; }
+  .detail-panel.open .detail-body > .detail-headline { animation-delay: 0.06s; }
+  .detail-panel.open .detail-body > .detail-actions { animation-delay: 0.10s; }
+  .detail-panel.open .detail-body > .detail-quick-row { animation-delay: 0.13s; }
+  .detail-panel.open .detail-body > .folder-section { animation-delay: 0.15s; }
+  .detail-panel.open .detail-body > .tag-section { animation-delay: 0.17s; }
+  .detail-panel.open .detail-body > .detail-stats { animation-delay: 0.19s; }
+  .detail-panel.open .detail-body > .detail-section { animation-delay: 0.22s; }
+  .detail-panel.open .detail-body > .detail-facts { animation-delay: 0.25s; }
+
+  @keyframes detail-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Progress bar shimmer when in stat card */
+  .stat-card-progress .progress-fill {
+    background: linear-gradient(
+      90deg,
+      var(--accent) 0%,
+      var(--accent-2) 50%,
+      var(--accent) 100%
+    );
+    background-size: 200% 100%;
+    animation: progress-shimmer 2.6s linear infinite;
+  }
+  @keyframes progress-shimmer {
+    from { background-position: 0% 0; }
+    to   { background-position: -200% 0; }
+  }
+
+  /* Tag chip subtle pop on hover */
+  .tag-chip { transition: transform 0.15s var(--ease), background 0.15s var(--ease); }
+  .tag-chip:hover { transform: translateY(-1px); background: var(--panel-hover); }
+}
+
+/* Detail-actions primary button: keep the lift on hover, but let the global
+   workbench-style box-shadow/background take over. */
+.detail-actions button.primary:hover:not(:disabled),
+.detail-actions button.secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.detail-actions button.primary:active:not(:disabled),
+.detail-actions button.secondary:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
