@@ -48,3 +48,25 @@
 }
 /* Sidebar padding-top lives in the canonical .sidebar rule below — putting
    it here would be clobbered by the padding shorthand. */
+
+/* Decorum titlebar element (declared in index.html so the plugin doesn't
+   inject its own). Click-transparent: window dragging is handled by the
+   app's data-tauri-drag-region bars (sidebar, topbar, reader bar), so this
+   strip must never eat clicks meant for buttons underneath it. On Windows,
+   decorum appends min/max/close buttons inside it — those stay clickable. */
+[data-tauri-decorum-tb] {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  background: transparent;
+  pointer-events: none;
+}
+[data-tauri-decorum-tb] .decorum-tb-btn {
+  pointer-events: auto;
+}

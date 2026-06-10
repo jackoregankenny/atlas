@@ -7,6 +7,13 @@
   </head>
 
   <body>
+    <!-- tauri-plugin-decorum looks for this element and, if absent, injects
+         its own full-width 32px drag strip at z-index 100 — which sat on top
+         of the reader/topbar buttons and swallowed their clicks. Providing
+         the element ourselves lets CSS make it click-transparent (the app's
+         own data-tauri-drag-region bars handle window dragging). See
+         src/styles/shell.css. -->
+    <div data-tauri-decorum-tb></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

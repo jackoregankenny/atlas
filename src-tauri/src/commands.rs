@@ -11,7 +11,7 @@ use crate::state::AppState;
 /// calls this so the portable manifest stays in step with SQLite,
 /// debounced by kind (see manifest::DirtyKind).
 fn touch(state: &State<'_, AppState>, kind: DirtyKind) {
-    state.manifest_writer.touch(kind);
+    state.touch_manifest(kind);
 }
 use std::path::PathBuf;
 use tauri::State;
@@ -52,7 +52,7 @@ pub fn import_paths(
     let report = library::import_paths(
         &state.db,
         &state.covers_dir,
-        &state.library_root,
+        &state.library_root(),
         &paths,
     );
     if report.imported > 0 {
@@ -156,14 +156,14 @@ pub fn app_paths(state: State<'_, AppState>) -> AppPaths {
         data_dir: state.data_dir.to_string_lossy().to_string(),
         covers_dir: state.covers_dir.to_string_lossy().to_string(),
         db_path: state.db_path.to_string_lossy().to_string(),
-        library_root: state.library_root.to_string_lossy().to_string(),
+        library_root: state.library_root().to_string_lossy().to_string(),
         first_run: state.first_run,
     }
 }
 
 #[tauri::command]
 pub fn migrate_orphan_files(state: State<'_, AppState>) -> Result<MigrationReport, String> {
-    library::migrate_orphan_files(&state.db, &state.library_root).map_err(|e| e.to_string())
+    library::migrate_orphan_files(&state.db, &state.library_root()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -252,7 +252,7 @@ pub fn delete_highlight(state: State<'_, AppState>, uuid: String) -> Result<(), 
 
 #[tauri::command]
 pub fn write_vault_manifest(state: State<'_, AppState>) -> Result<String, String> {
-    manifest::write_snapshot(&state.db, &state.library_root)
+    manifest::write_snapshot(&state.db, &state.library_root())
         .map(|p| p.to_string_lossy().to_string())
         .map_err(|e| e.to_string())
 }
@@ -509,11 +509,21 @@ pub struct VaultValidation {
 #[tauri::command]
 pub fn set_current_vault(
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
     path: String,
 ) -> Result<crate::vaults::VaultRegistry, String> {
     let p = std::path::PathBuf::from(&path);
     std::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
-    crate::vaults::touch_vault(&state.data_dir, &p).map_err(|e| e.to_string())
+    let registry =
+        crate::vaults::touch_vault(&state.data_dir, &p).map_err(|e| e.to_string())?;
+    // Take effect immediately: swap the root in place (flushing the old
+    // vault's pending manifest writes) and run the same bootstrap the app
+    // does at startup, so an existing vault's manifest reconciles in and
+    // `library-updated` refreshes the UI. No process restart — that would
+    // orphan the dev server under `tauri dev` and is needless in prod.
+    state.set_library_root(p.clone());
+    manifest::bootstrap_in_background(state.db.clone(), p, app);
+    Ok(registry)
 }
 
 #[tauri::command]
@@ -530,7 +540,7 @@ pub fn forget_vault(
 /// the user's pending edits get out the door.
 #[tauri::command]
 pub fn relaunch_app(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<(), String> {
-    if let Err(e) = crate::manifest::flush(&state.db, &state.library_root) {
+    if let Err(e) = crate::manifest::flush(&state.db, &state.library_root()) {
         tracing::warn!("pre-restart flush failed: {e}");
     }
     app.restart();

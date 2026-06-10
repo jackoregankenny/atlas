@@ -565,13 +565,10 @@ function MainApp() {
           onPicked={(path) => {
             setVaultPicker(null);
             if (!path) return;
-            // Switch mode: we set the new vault but haven't relaunched
-            // yet. Surface a toast so the user knows they need to.
-            pushToast(
-              "info",
-              "Restart Atlas to open the new vault — File → Quit then reopen.",
-              8000,
-            );
+            // The backend already swapped the vault in place; any books in
+            // the new vault's manifest arrive via `library-updated`.
+            refresh();
+            pushToast("success", `Vault ready — ${path}`, 6000);
           }}
         />
       )}

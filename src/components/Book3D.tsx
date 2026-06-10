@@ -13,6 +13,11 @@ interface Props {
   tint?: Rgb | null;
 }
 
+// Rest pose: mostly cover with a modest sliver of spine. A steeper yaw
+// shows off the 3D but reads as a gimmick; the book should sit like an
+// object at rest, not a product render.
+const REST = { x: -7, y: -18 };
+
 // Inline SVG noise → paper grain. ~280 bytes, no extra asset.
 const GRAIN_URL =
   "data:image/svg+xml;utf8," +
@@ -36,8 +41,8 @@ export function Book3D({
   // All animation state lives in refs — we mutate CSS variables directly
   // on the stage element each frame, so React never re-renders mid-drag.
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const rot = useRef({ x: -10, y: -26 });
-  const target = useRef({ x: -10, y: -26 });
+  const rot = useRef({ x: REST.x, y: REST.y });
+  const target = useRef({ x: REST.x, y: REST.y });
   const velocity = useRef({ x: 0, y: 0 });
   const dragging = useRef(false);
   const dragMoved = useRef(false);
@@ -56,17 +61,16 @@ export function Book3D({
   const edgeDark = shift(edgeLight, -0.22);
   const rgbStr = (c: Rgb) => `rgb(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)})`;
 
-  // Page edges: fine striations (the paper stack), banded shading toward
-  // the middle (where pages bend), and a few faint "page splits".
-  const edgeStriations = `repeating-linear-gradient(to bottom, rgba(60,42,18,0.10) 0, rgba(60,42,18,0.10) 0.5px, transparent 0.5px, transparent 2px)`;
-  const edgePageSplits = `repeating-linear-gradient(to bottom, transparent 0, transparent 14px, rgba(40,28,10,0.18) 14px, rgba(40,28,10,0.18) 14.5px, transparent 14.5px, transparent 31px)`;
-  const edgeBg = `${edgeStriations}, ${edgePageSplits}, linear-gradient(to right, ${rgbStr(edgeLight)} 0%, ${rgbStr(edgeDark)} 50%, ${rgbStr(edgeLight)} 100%)`;
-  const edgeBgV = `repeating-linear-gradient(to right, rgba(60,42,18,0.10) 0, rgba(60,42,18,0.10) 0.5px, transparent 0.5px, transparent 2px), linear-gradient(to bottom, ${rgbStr(edgeLight)} 0%, ${rgbStr(edgeDark)} 50%, ${rgbStr(edgeLight)} 100%)`;
+  // Page edges: fine paper striations over a soft light-dark-light sweep.
+  // No banding tricks — at this scale a real page block reads as an almost
+  // uniform surface with hairline texture.
+  const edgeStriations = `repeating-linear-gradient(to bottom, rgba(60,42,18,0.06) 0, rgba(60,42,18,0.06) 0.5px, transparent 0.5px, transparent 2px)`;
+  const edgeBg = `${edgeStriations}, linear-gradient(to right, ${rgbStr(edgeLight)} 0%, ${rgbStr(edgeDark)} 50%, ${rgbStr(edgeLight)} 100%)`;
+  const edgeBgV = `repeating-linear-gradient(to right, rgba(60,42,18,0.06) 0, rgba(60,42,18,0.06) 0.5px, transparent 0.5px, transparent 2px), linear-gradient(to bottom, ${rgbStr(edgeLight)} 0%, ${rgbStr(edgeDark)} 50%, ${rgbStr(edgeLight)} 100%)`;
 
-  // Spine: dark gradient + faint raised "hubs" (the bands you see on hardcovers).
-  const spineGrad = `linear-gradient(to right, ${rgbStr(shift(spineCol, -0.22))} 0%, ${rgbStr(shift(spineCol, 0.04))} 45%, ${rgbStr(shift(spineCol, -0.28))} 100%)`;
-  const spineHubs = `repeating-linear-gradient(to bottom, transparent 0, transparent 18%, rgba(255,255,255,0.06) 18%, rgba(255,255,255,0.06) 18.6%, rgba(0,0,0,0.18) 18.6%, rgba(0,0,0,0.18) 19.4%, transparent 19.4%, transparent 19.8%)`;
-  const spineBg = `${spineHubs}, ${spineGrad}`;
+  // Spine: a smooth rounded-cloth gradient. Deliberately no fake raised
+  // hubs — repeating bands read as a rendering trick, not a binding.
+  const spineBg = `linear-gradient(to right, ${rgbStr(shift(spineCol, -0.22))} 0%, ${rgbStr(shift(spineCol, 0.04))} 45%, ${rgbStr(shift(spineCol, -0.28))} 100%)`;
 
   const backGrad = `linear-gradient(135deg, ${rgbStr(shift(backCol, 0.08))} 0%, ${rgbStr(backCol)} 60%, ${rgbStr(shift(backCol, -0.1))} 100%)`;
 
@@ -86,10 +90,11 @@ export function Book3D({
       const flourishesOn =
         document.documentElement.getAttribute("data-flourishes") !== "off";
       if (idle && !flipped.current && flourishesOn) {
-        // Time-based, framerate-independent drift.
+        // Time-based, framerate-independent drift. Barely-there breathing —
+        // anything quicker reads as a screensaver.
         const t = now / 1000;
-        tx += Math.sin(t * 0.55) * 0.8;
-        ty += Math.sin(t * 0.42) * 1.4;
+        tx += Math.sin(t * 0.3) * 0.4;
+        ty += Math.sin(t * 0.22) * 0.7;
       }
 
       if (!dragging.current) {
@@ -139,10 +144,11 @@ export function Book3D({
       // Contact shadow stays tight, mostly tied to pitch.
       const contactOp = Math.max(0.22, 0.5 - Math.abs(pitchR) * 0.6);
 
-      // Specular band across the cover.
+      // Specular band across the cover. Paper, not gloss laminate —
+      // keep it faint or the whole object goes plasticky.
       const shineX = 50 - ry * 0.55;
       const shineAngle = 100 + ry * 0.35;
-      const shineOp = 0.06 + keyDir * 0.22;
+      const shineOp = 0.04 + keyDir * 0.12;
 
       // Ambient face shading: darken the face as it turns away.
       const faceShade = 0.55 + facing * 0.45;
@@ -212,8 +218,8 @@ export function Book3D({
     if (!dragMoved.current) {
       flipped.current = !flipped.current;
       target.current = {
-        x: flipped.current ? -6 : -10,
-        y: flipped.current ? 180 - 26 : -26,
+        x: flipped.current ? -5 : REST.x,
+        y: flipped.current ? 180 + REST.y : REST.y,
       };
       velocity.current = { x: 0, y: 0 };
     }
@@ -294,13 +300,18 @@ export function Book3D({
           <span className="book3d-spine-title">{title}</span>
         </div>
 
-        {/* Right page edge */}
+        {/* Page block — inset from every cover edge so the boards visibly
+            overhang the paper, the way a real hardcover squares up. The
+            reduced face width also stops the pages 1.5px short of each
+            cover plane (the board thickness). */}
+        {/* Right page edge (fore-edge) */}
         <div
           className="book3d-face book3d-edge"
           style={{
-            width: depth,
-            height,
-            transform: `translateX(${width - halfDepth}px) rotateY(90deg)`,
+            width: depth - 3,
+            height: height - 6,
+            top: 3,
+            transform: `translateX(${width - halfDepth - 2}px) rotateY(90deg)`,
             background: edgeBg,
           }}
         />
@@ -309,9 +320,10 @@ export function Book3D({
         <div
           className="book3d-face book3d-top"
           style={{
-            width,
-            height: depth,
-            transform: `translateY(-${halfDepth}px) rotateX(90deg)`,
+            width: width - 4,
+            height: depth - 3,
+            left: 2,
+            transform: `translateY(-${halfDepth - 2}px) rotateX(90deg)`,
             background: edgeBgV,
           }}
         />
@@ -320,9 +332,10 @@ export function Book3D({
         <div
           className="book3d-face book3d-bottom"
           style={{
-            width,
-            height: depth,
-            transform: `translateY(${height - halfDepth}px) rotateX(-90deg)`,
+            width: width - 4,
+            height: depth - 3,
+            left: 2,
+            transform: `translateY(${height - halfDepth - 2}px) rotateX(-90deg)`,
             background: edgeBgV,
           }}
         />

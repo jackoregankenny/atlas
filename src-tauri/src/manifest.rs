@@ -962,3 +962,46 @@ impl ManifestWriter {
 // silences the "unused" complaint.
 #[allow(dead_code)]
 fn _unused(_e: AtlasError) {}
+
+/// Vault bootstrap, shared by app startup and live vault switches (see
+/// docs/VAULTS.md):
+///   1. GC highlight delete tombstones older than 90 days.
+///   2. If no manifest exists in `root`, snapshot the current DB into one.
+///   3. Otherwise, reconcile newer-than-local entries into SQLite and emit
+///      `library-updated` so the UI refreshes any deltas.
+/// All off the main thread so a slow disk never blocks the caller.
+pub fn bootstrap_in_background(
+    pool: DbPool,
+    root: std::path::PathBuf,
+    app_handle: tauri::AppHandle,
+) {
+    use tauri::Emitter;
+    std::thread::spawn(move || {
+        if let Err(e) = crate::library::gc_highlight_tombstones(&pool, 90) {
+            tracing::debug!("tombstone gc failed: {e}");
+        }
+        match ensure_manifest_exists(&pool, &root) {
+            Ok(true) => tracing::info!(
+                "wrote initial vault manifest at {}",
+                manifest_path(&root).display()
+            ),
+            Ok(false) => match reconcile_on_startup(&pool, &root) {
+                Ok(Some(report)) => {
+                    tracing::info!(
+                        "vault reconcile: {} updated, {} unknown, {} local-only, {} collections",
+                        report.updated,
+                        report.unknown,
+                        report.local_only,
+                        report.collections_created,
+                    );
+                    if report.updated > 0 || report.collections_created > 0 {
+                        let _ = app_handle.emit("library-updated", &report);
+                    }
+                }
+                Ok(None) => tracing::debug!("vault manifest unchanged"),
+                Err(e) => tracing::warn!("vault reconcile failed: {e}"),
+            },
+            Err(e) => tracing::warn!("manifest snapshot failed: {e}"),
+        }
+    });
+}

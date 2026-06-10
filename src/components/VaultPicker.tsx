@@ -5,7 +5,6 @@ import {
   cloudDriveSuggestions,
   setCurrentVault,
   validateVaultPath,
-  relaunchApp,
   type CloudSuggestion,
 } from "../api";
 
@@ -71,16 +70,11 @@ export function VaultPicker({ mode, currentPath, onClose, onPicked }: Props) {
     if (!picked) return;
     setBusy(true);
     try {
+      // The backend swaps the vault in place (no restart): it re-roots
+      // the manifest writer and reconciles any existing vault manifest,
+      // emitting `library-updated` when books arrive.
       await setCurrentVault(picked);
-      // Welcome flow: relaunch immediately so the new AppState boots
-      // pointing at the chosen folder (we created a fallback default
-      // on AppState::init and we want to leave that behind cleanly).
-      // Switch flow: hand back to the host, which prompts for restart.
-      if (mode === "welcome") {
-        await relaunchApp();
-      } else {
-        onPicked(picked);
-      }
+      onPicked(picked);
     } catch (e) {
       setError(String(e));
       setBusy(false);

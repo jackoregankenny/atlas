@@ -3,20 +3,51 @@ use crate::error::Result;
 use crate::manifest::ManifestWriter;
 use crate::vaults;
 use std::path::PathBuf;
+use std::sync::RwLock;
 
 pub struct AppState {
     pub db: DbPool,
     pub data_dir: PathBuf,
     pub covers_dir: PathBuf,
     pub db_path: PathBuf,
-    pub library_root: PathBuf,
+    /// Behind a lock so picking a vault (welcome modal / Settings →
+    /// Switch) takes effect immediately, without restarting the process —
+    /// a restart would orphan the dev server in `tauri dev` and is
+    /// needless friction in production. Read via `library_root()`.
+    library_root: RwLock<PathBuf>,
     /// True iff there was no `vaults.json` when this AppState booted —
     /// frontend uses it to decide whether to show the welcome modal.
     pub first_run: bool,
     /// Background task that debounces and writes the vault manifest
-    /// after mutations. Cheap to clone; commands hold the AppState as
-    /// shared state and just call `.touch()` after each write.
-    pub manifest_writer: ManifestWriter,
+    /// after mutations. Swapped together with library_root; dropping
+    /// the old writer closes its channel and ends its task.
+    manifest_writer: RwLock<ManifestWriter>,
+}
+
+impl AppState {
+    pub fn library_root(&self) -> PathBuf {
+        self.library_root.read().unwrap().clone()
+    }
+
+    pub fn touch_manifest(&self, kind: crate::manifest::DirtyKind) {
+        self.manifest_writer.read().unwrap().touch(kind);
+    }
+
+    /// Point the app at a different vault: swap the root and respawn the
+    /// manifest writer against it. Pending writes for the old vault are
+    /// flushed first so nothing is lost.
+    pub fn set_library_root(&self, new_root: PathBuf) {
+        let old_root = self.library_root();
+        if old_root == new_root {
+            return;
+        }
+        if let Err(e) = crate::manifest::flush(&self.db, &old_root) {
+            tracing::warn!("flush before vault switch failed: {e}");
+        }
+        let writer = ManifestWriter::spawn(self.db.clone(), new_root.clone());
+        *self.manifest_writer.write().unwrap() = writer;
+        *self.library_root.write().unwrap() = new_root;
+    }
 }
 
 impl AppState {
@@ -50,9 +81,9 @@ impl AppState {
             data_dir,
             covers_dir,
             db_path,
-            library_root,
+            library_root: RwLock::new(library_root),
             first_run,
-            manifest_writer,
+            manifest_writer: RwLock::new(manifest_writer),
         })
     }
 }

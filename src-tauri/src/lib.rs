@@ -73,51 +73,13 @@ pub fn run() {
             let state = AppState::init(data_dir)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
 
-            // Vault manifest bootstrap (see docs/VAULTS.md):
-            //   1. If no manifest exists, snapshot the current DB into one.
-            //   2. Otherwise, reconcile newer-than-local entries into SQLite
-            //      (Phase 2: overlay-only — mutates progress, tags, rating,
-            //      finished, collections for known content_hashes).
-            //   3. Emit `library-updated` so the UI refreshes any deltas.
-            // All off the main thread so a slow disk never blocks startup.
-            {
-                let pool = state.db.clone();
-                let root = state.library_root.clone();
-                let app_handle = app.handle().clone();
-                std::thread::spawn(move || {
-                    // Forget highlight delete tombstones older than 90
-                    // days — comfortably longer than any reasonable
-                    // offline period. Failure is non-fatal.
-                    if let Err(e) = library::gc_highlight_tombstones(&pool, 90) {
-                        tracing::debug!("tombstone gc failed: {e}");
-                    }
-                    match manifest::ensure_manifest_exists(&pool, &root) {
-                        Ok(true) => tracing::info!(
-                            "wrote initial vault manifest at {}",
-                            manifest::manifest_path(&root).display()
-                        ),
-                        Ok(false) => match manifest::reconcile_on_startup(&pool, &root) {
-                            Ok(Some(report)) => {
-                                tracing::info!(
-                                    "vault reconcile: {} updated, {} unknown, {} local-only, {} collections",
-                                    report.updated,
-                                    report.unknown,
-                                    report.local_only,
-                                    report.collections_created,
-                                );
-                                if report.updated > 0
-                                    || report.collections_created > 0
-                                {
-                                    let _ = app_handle.emit("library-updated", &report);
-                                }
-                            }
-                            Ok(None) => tracing::debug!("vault manifest unchanged"),
-                            Err(e) => tracing::warn!("vault reconcile failed: {e}"),
-                        },
-                        Err(e) => tracing::warn!("manifest snapshot failed: {e}"),
-                    }
-                });
-            }
+            // Vault manifest bootstrap — shared with live vault switches
+            // (commands::set_current_vault). See manifest::bootstrap_in_background.
+            manifest::bootstrap_in_background(
+                state.db.clone(),
+                state.library_root(),
+                app.handle().clone(),
+            );
 
             app.manage(state);
 
@@ -376,7 +338,7 @@ pub fn run() {
         // would otherwise drop them when its runtime tears down.
         if let RunEvent::Exit = event {
             if let Some(state) = app_handle.try_state::<AppState>() {
-                if let Err(e) = manifest::flush(&state.db, &state.library_root) {
+                if let Err(e) = manifest::flush(&state.db, &state.library_root()) {
                     tracing::warn!("final manifest flush failed: {e}");
                 } else {
                     tracing::info!("flushed manifest on exit");
