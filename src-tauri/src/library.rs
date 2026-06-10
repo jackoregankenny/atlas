@@ -1257,3 +1257,103 @@ pub fn ensure_library_root() -> Result<PathBuf> {
     fs::create_dir_all(&root)?;
     Ok(root)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sort_key_strips_leading_articles() {
+        assert_eq!(sort_key("The Name of the Wind"), "name of the wind");
+        assert_eq!(sort_key("A Memory Called Empire"), "memory called empire");
+        assert_eq!(sort_key("An Instance of the Fingerpost"), "instance of the fingerpost");
+        // Only whole-word articles, not prefixes of real words.
+        assert_eq!(sort_key("Theory of Everything"), "theory of everything");
+        assert_eq!(sort_key("  Dune  "), "dune");
+    }
+
+    #[test]
+    fn safe_segment_strips_illegal_filename_chars() {
+        assert_eq!(safe_segment("Foo/Bar: Baz?"), "Foo-Bar- Baz-");
+        assert_eq!(safe_segment("  .hidden.  "), "hidden");
+        assert_eq!(safe_segment(""), "Untitled");
+        assert_eq!(safe_segment("///"), "---");
+    }
+
+    #[test]
+    fn safe_segment_caps_length() {
+        let long = "x".repeat(500);
+        assert_eq!(safe_segment(&long).chars().count(), 180);
+    }
+
+    #[test]
+    fn unique_path_suffixes_existing_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("Book.epub");
+        assert_eq!(unique_path(&p), p);
+        std::fs::write(&p, b"x").unwrap();
+        assert_eq!(unique_path(&p), dir.path().join("Book (2).epub"));
+        std::fs::write(dir.path().join("Book (2).epub"), b"x").unwrap();
+        assert_eq!(unique_path(&p), dir.path().join("Book (3).epub"));
+    }
+
+    #[test]
+    fn import_rejects_non_epub_and_skips_extensionless() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = crate::db::open(&dir.path().join("atlas.db")).unwrap();
+        let pdf = dir.path().join("paper.pdf");
+        std::fs::write(&pdf, b"%PDF-").unwrap();
+        let bare = dir.path().join("LICENSE");
+        std::fs::write(&bare, b"text").unwrap();
+
+        let report = import_paths(
+            &db,
+            &dir.path().join("covers"),
+            dir.path(),
+            &[pdf, bare],
+        );
+        assert_eq!(report.imported, 0);
+        assert_eq!(report.failed, 1, "only the .pdf should report an error");
+        assert!(report.errors[0].contains("only .epub"));
+    }
+
+    #[test]
+    fn db_open_is_idempotent_and_migrated() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("atlas.db");
+        {
+            let pool = crate::db::open(&path).unwrap();
+            let conn = pool.get().unwrap();
+            conn.execute(
+                "INSERT INTO books (title, title_sort, content_hash) VALUES ('T', 't', 'h1')",
+                [],
+            )
+            .unwrap();
+        }
+        // Re-open over the existing file: schema + migrations must not error
+        // and data must survive.
+        let pool = crate::db::open(&path).unwrap();
+        let books = list_books(&pool).unwrap();
+        assert_eq!(books.len(), 1);
+        assert_eq!(books[0].title, "T");
+        // list_books omits the description payload by design.
+        assert_eq!(books[0].description, None);
+    }
+
+    #[test]
+    fn duplicate_content_hash_is_rejected_by_schema() {
+        let dir = tempfile::tempdir().unwrap();
+        let pool = crate::db::open(&dir.path().join("atlas.db")).unwrap();
+        let conn = pool.get().unwrap();
+        conn.execute(
+            "INSERT INTO books (title, title_sort, content_hash) VALUES ('A', 'a', 'same')",
+            [],
+        )
+        .unwrap();
+        let dup = conn.execute(
+            "INSERT INTO books (title, title_sort, content_hash) VALUES ('B', 'b', 'same')",
+            [],
+        );
+        assert!(dup.is_err(), "UNIQUE(content_hash) must hold");
+    }
+}

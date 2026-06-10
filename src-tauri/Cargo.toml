@@ -53,3 +53,6 @@ strip = true
 panic = "abort"
 opt-level = "z"
 
+[dev-dependencies]
+tempfile = "3.27.0"
+

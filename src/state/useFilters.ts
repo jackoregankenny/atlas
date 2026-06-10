@@ -2,6 +2,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import type { Book, BookStatus } from "../types";
 import type { SortField } from "../hooks/useLibraryPrefs";
 import { sortBooks } from "../util/sort";
+import { applyFilters } from "../util/filter";
 
 export type StatusFilter = "all" | BookStatus;
 
@@ -25,28 +26,13 @@ export function useFilters(
   const deferredQuery = useDeferredValue(query);
 
   const filteredSorted = useMemo(() => {
-    let arr = books;
-    if (statusFilter !== "all") {
-      arr = arr.filter((b) => b.status === statusFilter);
-    }
-    if (tagFilter) {
-      arr = arr.filter((b) => b.tags.includes(tagFilter));
-    }
-    if (authorFilter) {
-      arr = arr.filter((b) => b.authors.includes(authorFilter));
-    }
-    if (seriesFilter) {
-      arr = arr.filter((b) => b.series === seriesFilter);
-    }
-    const q = deferredQuery.trim().toLowerCase();
-    if (q) {
-      arr = arr.filter(
-        (b) =>
-          b.title.toLowerCase().includes(q) ||
-          b.authors.some((a) => a.toLowerCase().includes(q)) ||
-          (b.series ?? "").toLowerCase().includes(q)
-      );
-    }
+    const arr = applyFilters(books, {
+      status: statusFilter,
+      tag: tagFilter,
+      author: authorFilter,
+      series: seriesFilter,
+      query: deferredQuery,
+    });
     return sortBooks(arr, sortField, sortDir);
   }, [
     books,
