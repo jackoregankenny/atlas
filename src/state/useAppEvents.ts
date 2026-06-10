@@ -14,6 +14,8 @@ interface Deps {
   refresh: () => Promise<void>;
   pushToast: PushToast;
   onPickImport: (m: "files" | "folder") => void;
+  /** "Open with Atlas" — EPUB paths handed to us by the OS. */
+  runImport: (paths: string[]) => Promise<void>;
   onExportHighlights: () => void;
   onRevealVault: () => void;
   focusFilter: () => void;
@@ -39,6 +41,7 @@ export function useAppEvents(deps: Deps) {
     refresh,
     pushToast,
     onPickImport,
+    runImport,
     onExportHighlights,
     onRevealVault,
     focusFilter,
@@ -214,6 +217,26 @@ export function useAppEvents(deps: Deps) {
     setPaletteOpen,
     setShortcutsOpen,
   ]);
+
+  // "Open with Atlas" files from the OS (Finder/Explorer double-click,
+  // drag onto the dock icon). Rust normalizes the three per-platform
+  // delivery paths into one `open-files` event.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<string[]>("open-files", (event) => {
+          if (event.payload.length > 0) {
+            runImport(event.payload);
+          }
+        });
+      } catch {
+        /* not in Tauri */
+      }
+    })();
+    return () => unlisten?.();
+  }, [runImport]);
 
   /**
    * Handle incoming atlas:// URLs.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { listBooks, importPaths, migrateOrphanFiles } from "../api";
+import { listBooks, importPaths, migrateOrphanFiles, setTaskbarProgress } from "../api";
 import type { Book, ImportReport } from "../types";
 import type { PushToast } from "./useToasts";
 
@@ -58,6 +58,8 @@ export function useLibraryState(pushToast: PushToast) {
   const runImport = useCallback(
     async (paths: string[]) => {
       setImporting(true);
+      // Mirror onto the dock/taskbar; total is unknown, so indeterminate.
+      setTaskbarProgress(null, true).catch(() => {});
       try {
         const report: ImportReport = await importPaths(paths);
         await refresh();
@@ -74,6 +76,7 @@ export function useLibraryState(pushToast: PushToast) {
         pushToast("error", `Import failed: ${e}`);
       } finally {
         setImporting(false);
+        setTaskbarProgress(null).catch(() => {});
       }
     },
     [refresh, pushToast]

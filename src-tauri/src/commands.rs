@@ -545,3 +545,33 @@ pub fn relaunch_app(state: State<'_, AppState>, app: tauri::AppHandle) -> Result
     }
     app.restart();
 }
+
+/// Mirror long-running work onto the OS surface — macOS dock icon,
+/// Windows taskbar, Linux (Unity-protocol) launcher. `indeterminate`
+/// for work with no known total (import), percent for batch jobs,
+/// neither to clear.
+#[tauri::command]
+pub fn set_taskbar_progress(
+    window: tauri::Window,
+    percent: Option<u64>,
+    indeterminate: Option<bool>,
+) -> Result<(), String> {
+    use tauri::window::{ProgressBarState, ProgressBarStatus};
+    let state = if indeterminate.unwrap_or(false) {
+        ProgressBarState {
+            status: Some(ProgressBarStatus::Indeterminate),
+            progress: None,
+        }
+    } else if let Some(p) = percent {
+        ProgressBarState {
+            status: Some(ProgressBarStatus::Normal),
+            progress: Some(p.min(100)),
+        }
+    } else {
+        ProgressBarState {
+            status: Some(ProgressBarStatus::None),
+            progress: None,
+        }
+    };
+    window.set_progress_bar(state).map_err(|e| e.to_string())
+}

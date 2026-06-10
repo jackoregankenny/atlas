@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { enrichBook } from "../api";
+import { enrichBook, setTaskbarProgress } from "../api";
 import type { Book } from "../types";
 import { startEnrichBatch, type EnrichJob } from "../enrichPool";
 import type { PushToast } from "./useToasts";
@@ -51,11 +51,20 @@ export function useEnrichment(
 
   const runBatch = useCallback(
     (ids: number[]) => {
-      const handle = startEnrichBatch(ids, (job) => setBatchJob(job));
+      const handle = startEnrichBatch(ids, (job) => {
+        setBatchJob(job);
+        // Mirror batch progress onto the dock/taskbar.
+        if (job.total > 0) {
+          setTaskbarProgress(Math.round((job.done / job.total) * 100)).catch(
+            () => {}
+          );
+        }
+      });
       batchHandleRef.current = handle;
       handle.promise.then((final) => {
         batchHandleRef.current = null;
         setBatchJob(null);
+        setTaskbarProgress(null).catch(() => {});
         refresh();
         if (final.cancelled) {
           pushToast("info", `Stopped · ${final.matched}/${final.done} matched`);

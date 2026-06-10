@@ -228,3 +228,12 @@ export const forgetVault = (path: string): Promise<VaultRegistry> =>
   invoke("forget_vault", { path });
 /** Quit & relaunch — required after switching vaults. */
 export const relaunchApp = (): Promise<void> => invoke("relaunch_app");
+
+/** Mirror long-running work onto the macOS dock / Windows taskbar /
+ *  Linux launcher. Pass a percent for known totals, indeterminate for
+ *  unknown, neither to clear. Best-effort — failures are ignorable. */
+export const setTaskbarProgress = (
+  percent: number | null,
+  indeterminate = false
+): Promise<void> =>
+  invoke("set_taskbar_progress", { percent, indeterminate });

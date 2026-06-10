@@ -31,11 +31,18 @@ pub fn run() {
                 let _ = w.set_focus();
             }
             // argv[0] is the binary path; everything after is potential
-            // deep-link URLs handed to us by the OS.
+            // deep-link URLs or file paths handed to us by the OS
+            // (Windows/Linux deliver "Open with" files this way).
+            let mut files: Vec<String> = Vec::new();
             for arg in argv.iter().skip(1) {
                 if arg.starts_with("atlas://") {
                     let _ = app.emit("deep-link", arg);
+                } else if arg.to_lowercase().ends_with(".epub") {
+                    files.push(arg.clone());
                 }
+            }
+            if !files.is_empty() {
+                let _ = app.emit("open-files", files);
             }
         }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -65,6 +72,26 @@ pub fn run() {
                         for url in urls {
                             let _ = handle.emit("deep-link", url.as_str());
                         }
+                    });
+                }
+            }
+
+            // Cold-start "Open with Atlas" on Windows/Linux: the OS passes
+            // the file path(s) as plain argv. (macOS delivers these via
+            // RunEvent::Opened instead — handled in app.run below.)
+            {
+                let files: Vec<String> = std::env::args()
+                    .skip(1)
+                    .filter(|a| {
+                        a.to_lowercase().ends_with(".epub")
+                            && std::path::Path::new(a).exists()
+                    })
+                    .collect();
+                if !files.is_empty() {
+                    let handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(400));
+                        let _ = handle.emit("open-files", files);
                     });
                 }
             }
@@ -320,6 +347,7 @@ pub fn run() {
             commands::set_current_vault,
             commands::forget_vault,
             commands::relaunch_app,
+            commands::set_taskbar_progress,
         ])
         .build(tauri::generate_context!());
 
@@ -332,6 +360,21 @@ pub fn run() {
     };
 
     app.run(|app_handle, event| {
+        // macOS "Open with Atlas" / drag-onto-dock-icon: file URLs arrive
+        // as an Opened event (both cold start and while running).
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Opened { urls } = &event {
+            let files: Vec<String> = urls
+                .iter()
+                .filter_map(|u| u.to_file_path().ok())
+                .map(|p| p.to_string_lossy().to_string())
+                .filter(|p| p.to_lowercase().ends_with(".epub"))
+                .collect();
+            if !files.is_empty() {
+                let _ = app_handle.emit("open-files", files);
+            }
+        }
+
         // On final shutdown, flush any pending manifest writes
         // synchronously so the user's last edits before quitting
         // make it into the portable file. The debounced writer

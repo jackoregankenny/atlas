@@ -209,6 +209,7 @@ function MainApp() {
     refresh,
     pushToast,
     onPickImport,
+    runImport,
     onExportHighlights,
     onRevealVault,
     focusFilter,
