@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Check, Monitor, Moon, Sun } from "lucide-react";
+import { Check, Loader2, Monitor, Moon, RefreshCw, Sun } from "lucide-react";
 import { appPaths } from "../api";
+import type { UpdateStatus } from "../state/useUpdater";
 import {
   type Theme,
   type AccentValue,
@@ -18,6 +19,9 @@ interface Props {
   ui: ReturnType<typeof useUiPrefs>;
   onExportAllAnnotations: () => void;
   onSwitchVault: () => void;
+  updateStatus: UpdateStatus;
+  onCheckUpdates: () => void;
+  onInstallUpdate: () => void;
 }
 
 export function SettingsView({
@@ -28,6 +32,9 @@ export function SettingsView({
   ui,
   onExportAllAnnotations,
   onSwitchVault,
+  updateStatus,
+  onCheckUpdates,
+  onInstallUpdate,
 }: Props) {
   const [currentVault, setCurrentVault] = useState<string>("");
   useEffect(() => {
@@ -214,6 +221,51 @@ export function SettingsView({
             <button className="seg" onClick={onExportAllAnnotations}>
               Export…
             </button>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h3>Updates</h3>
+          <div className="settings-row">
+            <div>
+              <div className="settings-label">
+                {updateStatus.kind === "available"
+                  ? `Atlas ${updateStatus.version} is available`
+                  : updateStatus.kind === "downloading"
+                    ? `Downloading…${updateStatus.percent != null ? ` ${updateStatus.percent}%` : ""}`
+                    : updateStatus.kind === "ready"
+                      ? "Restarting into the new version…"
+                      : updateStatus.kind === "uptodate"
+                        ? "You're on the latest version"
+                        : "Check for updates"}
+              </div>
+              <div className="settings-desc">
+                Updates download from GitHub releases and install in place.
+              </div>
+            </div>
+            {updateStatus.kind === "available" ? (
+              <button className="settings-btn" onClick={onInstallUpdate}>
+                Install &amp; restart
+              </button>
+            ) : updateStatus.kind === "downloading" ||
+              updateStatus.kind === "ready" ? (
+              <button className="settings-btn" disabled>
+                <Loader2 size={13} className="spin" />
+              </button>
+            ) : (
+              <button
+                className="settings-btn"
+                onClick={onCheckUpdates}
+                disabled={updateStatus.kind === "checking"}
+              >
+                {updateStatus.kind === "checking" ? (
+                  <Loader2 size={13} className="spin" />
+                ) : (
+                  <RefreshCw size={13} strokeWidth={2} />
+                )}
+                <span>Check now</span>
+              </button>
+            )}
           </div>
         </section>
 

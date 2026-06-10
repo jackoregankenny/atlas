@@ -47,6 +47,7 @@ import { useDetailPreview } from "./state/useDetailPreview";
 import { useBookActions } from "./state/useBookActions";
 import { useAppEvents, type View } from "./state/useAppEvents";
 import { useKeyboardShortcuts } from "./state/useKeyboardShortcuts";
+import { useUpdater } from "./state/useUpdater";
 import { withViewTransition } from "./util/viewTransition";
 import "./App.css";
 
@@ -129,6 +130,7 @@ function MainApp() {
     enrichment;
   const preview = useDetailPreview(books);
   const { setSelectedId, previewId, previewBook, onHover, clearCache } = preview;
+  const updater = useUpdater(pushToast);
 
   // The list payload changed → cached full records may be stale.
   const refreshAndInvalidate = useCallback(async () => {
@@ -486,6 +488,9 @@ function MainApp() {
             accent={accent}
             setAccent={setAccent}
             ui={ui}
+            updateStatus={updater.status}
+            onCheckUpdates={() => updater.check()}
+            onInstallUpdate={() => updater.install()}
             onExportAllAnnotations={() => actions.onExportAnnotations()}
             onSwitchVault={async () => {
               try {

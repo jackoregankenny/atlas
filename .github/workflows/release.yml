@@ -83,6 +83,11 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the updater artifacts (createUpdaterArtifacts in
+          # tauri.conf.json); tauri-action also emits latest.json, which
+          # installed apps poll via the updater endpoint.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           args: --target ${{ matrix.target }}
           tagName: ${{ github.ref_name }}

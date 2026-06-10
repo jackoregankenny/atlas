@@ -34,6 +34,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "fileAssociations": [
       {
         "ext": ["epub"],
@@ -56,6 +57,12 @@
       "desktop": {
         "schemes": ["atlas"]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY1NkRFNDk4REY0ODNCQjMKUldTek8wamZtT1J0OVorN0JCWlM5SVl5eGgrbXVVSFo3ZXV6S2ZJcW5ndVNpWWpvVnFtSHJPbWoK",
+      "endpoints": [
+        "https://github.com/jackoregankenny/atlas/releases/latest/download/latest.json"
+      ]
     }
   }
 }

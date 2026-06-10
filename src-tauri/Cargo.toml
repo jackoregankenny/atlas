@@ -45,6 +45,8 @@ urlencoding = "2"
 window-vibrancy = "0.5"
 rayon = "1.12.0"
 fs2 = "0.4.3"
+tauri-plugin-updater = "2.10.1"
+tauri-plugin-process = "2.3.1"
 
 [profile.release]
 lto = true
