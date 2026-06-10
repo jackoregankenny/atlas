@@ -68,10 +68,15 @@
 }
 .detail-header > * { pointer-events: auto; }
 .detail-header .icon-btn {
-  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  /* Solid enough to read on any cover-tinted hero. */
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+.detail-header .icon-btn:hover {
+  background: var(--bg-elev);
 }
 .detail-body {
   flex: 1;

@@ -23,11 +23,13 @@ button:active:not(:disabled) {
 }
 button:disabled {
   opacity: 0.4;
-  cursor: default;
+  cursor: not-allowed;
 }
+/* Solid accent outer ring with a bg-colored inner gap: stays visible on
+   book-tinted hero panels where a translucent ring would wash out. */
 button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent-ring);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
 }
 /* Soft-3D button family. .primary / .secondary share the same physical
    treatment — gradient body, thin top highlight, bottom shadow line, outer

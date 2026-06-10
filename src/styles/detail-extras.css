@@ -44,6 +44,12 @@
   border: 1px solid var(--border-soft);
   border-radius: 99px;
   color: var(--text-dim);
+  max-width: 180px;
+}
+.tag-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tag-chip-x {
   width: 14px;

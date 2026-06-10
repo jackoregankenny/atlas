@@ -356,15 +356,15 @@
   border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
   color: var(--text);
   opacity: 0;
-  transition: opacity 0.16s var(--ease), transform 0.16s var(--ease);
+  transition: opacity 0.16s var(--ease), transform 0.16s var(--spring);
   backdrop-filter: blur(8px);
-  transform: translateY(2px);
+  transform: translateY(2px) scale(0.9);
   gap: 4px;
 }
 .card:hover .card-action,
 .card-action:disabled {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 .card-action:disabled {
   background: var(--accent-soft);
