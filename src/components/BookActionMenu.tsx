@@ -145,6 +145,8 @@ export function BookActionMenu({
               <MenuSeparator />
               <div className="menu-hint">
                 Plug in a Kindle or Kobo via USB and it appears here.
+                Kindles from 2023 on connect via MTP, which Atlas can't
+                see yet — use Amazon's Send to Kindle for those.
               </div>
             </>
           ) : (

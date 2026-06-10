@@ -260,6 +260,8 @@ pub fn write_vault_manifest(state: State<'_, AppState>) -> Result<String, String
 #[derive(serde::Serialize)]
 pub struct SendResult {
     pub dest: String,
+    /// "azw3" / "kepub" when the book was converted on the way out.
+    pub converted_to: Option<String>,
 }
 
 #[tauri::command]
@@ -275,9 +277,10 @@ pub fn send_to_device(
         .file_path
         .ok_or_else(|| "book has no canonical file".to_string())?;
     let path = std::path::PathBuf::from(file_path);
-    let dest = devices::send_to_device(&device_id, &path).map_err(|e| e.to_string())?;
+    let outcome = devices::send_to_device(&device_id, &path).map_err(|e| e.to_string())?;
     Ok(SendResult {
-        dest: dest.to_string_lossy().to_string(),
+        dest: outcome.dest.to_string_lossy().to_string(),
+        converted_to: outcome.converted_to,
     })
 }
 

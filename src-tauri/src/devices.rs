@@ -169,24 +169,189 @@ fn identify(root: &Path) -> Option<Device> {
     None
 }
 
-pub fn send_to_device(device_id: &str, book_file: &Path) -> Result<PathBuf> {
+/// What actually landed on the device. `converted_to` is Some("azw3") /
+/// Some("kepub") when the payload was transcoded on the way out.
+#[derive(Debug, Serialize)]
+pub struct SendOutcome {
+    pub dest: PathBuf,
+    pub converted_to: Option<String>,
+}
+
+pub fn send_to_device(device_id: &str, book_file: &Path) -> Result<SendOutcome> {
     let devices = detect_devices();
     let device = devices
         .iter()
         .find(|d| d.id == device_id)
         .ok_or_else(|| AtlasError::Msg("device not connected".into()))?;
 
+    // Pick the payload the device can actually read. Modern Kindle firmware
+    // does not open sideloaded EPUB, so a Kindle send without a converter is
+    // an error with instructions — not a silent copy of a file the device
+    // will reject.
+    let (payload, converted_to) = match device.kind {
+        DeviceKind::Kindle => {
+            let tool = find_tool(EBOOK_CONVERT_CANDIDATES).ok_or_else(|| {
+                AtlasError::Msg(
+                    "Kindles don't read sideloaded EPUB, so Atlas converts to AZW3 \
+                     first — but no converter was found. Install Calibre (its \
+                     ebook-convert tool is used automatically), or send this book \
+                     with Amazon's Send to Kindle instead."
+                        .into(),
+                )
+            })?;
+            (convert_with_ebook_convert(&tool, book_file, "azw3")?, Some("azw3".to_string()))
+        }
+        DeviceKind::Kobo => {
+            // kepub is an enhancement (better typography/footnotes on Kobo),
+            // not a requirement — fall back to plain EPUB silently.
+            match find_tool(KEPUBIFY_CANDIDATES) {
+                Some(tool) => (convert_with_kepubify(&tool, book_file)?, Some("kepub".to_string())),
+                None => (book_file.to_path_buf(), None),
+            }
+        }
+        _ => (book_file.to_path_buf(), None),
+    };
+
     fs::create_dir_all(&device.books_dir)
         .map_err(|e| AtlasError::Msg(format!("create books dir: {}", e)))?;
 
-    let file_name = book_file
+    let size = fs::metadata(&payload)
+        .map_err(|e| AtlasError::Msg(format!("read payload: {}", e)))?
+        .len();
+    if let Ok(free) = fs2::available_space(&device.books_dir) {
+        // 10% headroom so we never fill the device to the byte.
+        if free < size + size / 10 {
+            return Err(AtlasError::Msg(format!(
+                "Not enough space on {} ({} MB needed, {} MB free)",
+                device.name,
+                size / 1_048_576 + 1,
+                free / 1_048_576
+            )));
+        }
+    }
+
+    let file_name = payload
         .file_name()
         .ok_or_else(|| AtlasError::Msg("invalid source path".into()))?;
-    let dest = device.books_dir.join(file_name);
+    let mut dest = device.books_dir.join(file_name);
+    if dest.exists() {
+        let same_size = fs::metadata(&dest).map(|m| m.len() == size).unwrap_or(false);
+        if same_size {
+            // Identical name and size — treat as already on the device.
+            return Ok(SendOutcome { dest, converted_to });
+        }
+        // Same name, different content: don't clobber someone else's book.
+        dest = unique_dest(&dest);
+    }
 
-    // Use a copy so the user keeps the canonical library copy.
-    fs::copy(book_file, &dest)
-        .map_err(|e| AtlasError::Msg(format!("copy to device: {}", e)))?;
+    // Copy via a temp name then rename, so a yanked cable mid-copy leaves an
+    // obviously-partial file instead of a truncated one with the real name.
+    let tmp = dest.with_extension("atlas-partial");
+    if let Err(e) = fs::copy(&payload, &tmp) {
+        let _ = fs::remove_file(&tmp);
+        return Err(AtlasError::Msg(format!("copy to device: {}", e)));
+    }
+    if let Err(e) = fs::rename(&tmp, &dest) {
+        let _ = fs::remove_file(&tmp);
+        return Err(AtlasError::Msg(format!("finalize on device: {}", e)));
+    }
 
-    Ok(dest)
+    Ok(SendOutcome { dest, converted_to })
+}
+
+fn unique_dest(p: &Path) -> PathBuf {
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("book");
+    let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("epub");
+    let parent = p.parent().unwrap_or_else(|| Path::new("."));
+    for i in 2..1000 {
+        let candidate = parent.join(format!("{} ({}).{}", stem, i, ext));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    p.to_path_buf()
+}
+
+// ── conversion tools ─────────────────────────────────────────────────────
+//
+// Detect-and-use, never bundled (brief §3). Checked on PATH first, then in
+// the usual install locations — a Tauri app launched from Finder/Dock gets
+// a minimal PATH that misses Homebrew and /usr/local.
+
+const EBOOK_CONVERT_CANDIDATES: &[&str] = &[
+    "ebook-convert",
+    "/opt/homebrew/bin/ebook-convert",
+    "/usr/local/bin/ebook-convert",
+    "/Applications/calibre.app/Contents/MacOS/ebook-convert",
+    "C:\\Program Files\\Calibre2\\ebook-convert.exe",
+];
+
+const KEPUBIFY_CANDIDATES: &[&str] = &[
+    "kepubify",
+    "/opt/homebrew/bin/kepubify",
+    "/usr/local/bin/kepubify",
+];
+
+fn find_tool(candidates: &[&str]) -> Option<PathBuf> {
+    for c in candidates {
+        let p = Path::new(c);
+        if p.is_absolute() {
+            if p.exists() {
+                return Some(p.to_path_buf());
+            }
+        } else if let Ok(out) = std::process::Command::new(c).arg("--version").output() {
+            if out.status.success() {
+                return Some(PathBuf::from(c));
+            }
+        }
+    }
+    None
+}
+
+fn convert_with_ebook_convert(tool: &Path, epub: &Path, fmt: &str) -> Result<PathBuf> {
+    let stem = epub.file_stem().and_then(|s| s.to_str()).unwrap_or("book");
+    let out = std::env::temp_dir().join(format!("atlas-send-{}.{}", stem, fmt));
+    let status = std::process::Command::new(tool)
+        .arg(epub)
+        .arg(&out)
+        .output()
+        .map_err(|e| AtlasError::Msg(format!("run ebook-convert: {}", e)))?;
+    if !status.status.success() || !out.exists() {
+        return Err(AtlasError::Msg(format!(
+            "ebook-convert failed: {}",
+            String::from_utf8_lossy(&status.stderr)
+                .lines()
+                .last()
+                .unwrap_or("unknown error")
+        )));
+    }
+    Ok(out)
+}
+
+fn convert_with_kepubify(tool: &Path, epub: &Path) -> Result<PathBuf> {
+    let out_dir = std::env::temp_dir().join("atlas-kepub");
+    fs::create_dir_all(&out_dir)
+        .map_err(|e| AtlasError::Msg(format!("create temp dir: {}", e)))?;
+    let status = std::process::Command::new(tool)
+        .arg("-o")
+        .arg(&out_dir)
+        .arg(epub)
+        .output()
+        .map_err(|e| AtlasError::Msg(format!("run kepubify: {}", e)))?;
+    if !status.status.success() {
+        return Err(AtlasError::Msg(format!(
+            "kepubify failed: {}",
+            String::from_utf8_lossy(&status.stderr)
+                .lines()
+                .last()
+                .unwrap_or("unknown error")
+        )));
+    }
+    let stem = epub.file_stem().and_then(|s| s.to_str()).unwrap_or("book");
+    let produced = out_dir.join(format!("{}.kepub.epub", stem));
+    if produced.exists() {
+        Ok(produced)
+    } else {
+        Err(AtlasError::Msg("kepubify produced no output".into()))
+    }
 }

@@ -99,10 +99,16 @@ export function useBookActions({
     async (book: Book, device: Device) => {
       pushToast("info", `Sending to ${device.name}…`);
       try {
-        await sendToDevice(book.id, device.id);
-        pushToast("success", `Sent "${book.title}" to ${device.name}`);
+        const out = await sendToDevice(book.id, device.id);
+        const suffix =
+          out.converted_to === "azw3"
+            ? " (converted to AZW3)"
+            : out.converted_to === "kepub"
+              ? " (as KEPUB)"
+              : "";
+        pushToast("success", `Sent "${book.title}" to ${device.name}${suffix}`);
       } catch (e) {
-        pushToast("error", `Send failed: ${e}`);
+        pushToast("error", `Send failed: ${e}`, 9000);
       }
     },
     [pushToast]

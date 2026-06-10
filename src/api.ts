@@ -50,7 +50,7 @@ export const listDevices = (): Promise<Device[]> => invoke("list_devices");
 export const sendToDevice = (
   id: number,
   deviceId: string
-): Promise<{ dest: string }> =>
+): Promise<{ dest: string; converted_to: string | null }> =>
   invoke("send_to_device", { id, deviceId });
 export const migrateOrphanFiles = (): Promise<{
   moved: number;

@@ -106,7 +106,11 @@ export function SelectionBar({
               {devices.length === 0 ? (
                 <>
                   <div className="menu-empty">No device connected</div>
-                  <div className="menu-hint">Plug in a Kindle or Kobo via USB.</div>
+                  <div className="menu-hint">
+                    Plug in a Kindle or Kobo via USB. Kindles from 2023 on
+                    connect via MTP, which Atlas can't see yet — use
+                    Amazon's Send to Kindle for those.
+                  </div>
                 </>
               ) : (
                 devices.map((d) => (
