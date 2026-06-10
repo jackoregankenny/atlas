@@ -10,6 +10,7 @@ import {
   X,
   Columns,
   AlignJustify,
+  List,
   Type,
   Highlighter,
   Trash2,
@@ -86,6 +87,12 @@ export function Reader({ book, onClose, standalone = false }: Props) {
   const [pct, setPct] = useState<number>(book.progress_percent ?? 0);
   const [chapter, setChapter] = useState<string>("");
   const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [toc, setToc] = useState<TocEntry[]>([]);
+  const [tocOpen, setTocOpen] = useState(false);
+  // True once epub.js locations exist (generated or loaded from cache) —
+  // unlocks accurate percentages and click-to-seek on the progress bar.
+  const [locReady, setLocReady] = useState(false);
 
   // Highlights are kept as the source-of-truth list; the rendition's
   // annotation overlay is kept in sync from this state so we never
@@ -125,6 +132,8 @@ export function Reader({ book, onClose, standalone = false }: Props) {
 
   useEffect(() => {
     if (!fileUrl || !containerRef.current) return;
+    setReady(false);
+    setLoadError(null);
     const epubBook = ePub(fileUrl);
     bookRef.current = epubBook;
     const rendition = epubBook.renderTo(containerRef.current, {
@@ -145,7 +154,49 @@ export function Reader({ book, onClose, standalone = false }: Props) {
     });
 
     const start = book.progress_cfi ?? undefined;
-    rendition.display(start).then(() => setReady(true));
+    rendition
+      .display(start)
+      .then(() => setReady(true))
+      .catch((e: unknown) => {
+        // A bad saved CFI shouldn't brick the book — retry from the top.
+        if (start) {
+          rendition
+            .display()
+            .then(() => setReady(true))
+            .catch((e2: unknown) => setLoadError(describeEpubError(e2)));
+        } else {
+          setLoadError(describeEpubError(e));
+        }
+      });
+    // Corrupt archives often fail before display's promise settles.
+    epubBook.opened.catch((e: unknown) => setLoadError(describeEpubError(e)));
+
+    // Locations give us accurate progress % and a seekable progress bar.
+    // Generation walks the whole spine (slow on big books), so cache the
+    // result per book and load it instantly on the next open.
+    const locKey = `atlas-locations-${book.id}`;
+    const cachedLocations = localStorage.getItem(locKey);
+    if (cachedLocations) {
+      try {
+        epubBook.locations.load(cachedLocations);
+        setLocReady(true);
+      } catch {
+        localStorage.removeItem(locKey);
+      }
+    }
+    if (!cachedLocations) {
+      epubBook.ready
+        .then(() => epubBook.locations.generate(1024))
+        .then(() => {
+          try {
+            localStorage.setItem(locKey, epubBook.locations.save());
+          } catch {
+            /* quota — locations still work for this session */
+          }
+          setLocReady(true);
+        })
+        .catch(() => {});
+    }
 
     rendition.on("relocated", (loc: Location) => {
       const percent = loc.start?.percentage ? loc.start.percentage * 100 : 0;
@@ -161,6 +212,7 @@ export function Reader({ book, onClose, standalone = false }: Props) {
 
     epubBook.loaded.navigation
       .then((nav) => {
+        setToc(flattenToc(nav.toc));
         rendition.on("relocated", (loc: Location) => {
           const href = loc.start?.href;
           if (href) {
@@ -277,6 +329,9 @@ export function Reader({ book, onClose, standalone = false }: Props) {
       } catch {}
       bookRef.current = null;
       renditionRef.current = null;
+      // The cleanups captured the destroyed rendition; dropping them lets
+      // the highlight-sync effect re-register everything on the next one.
+      annotationCleanup.current.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileUrl, book.id, flow]);
@@ -295,25 +350,30 @@ export function Reader({ book, onClose, standalone = false }: Props) {
     };
   }, [book.id]);
 
-  // Sync the rendition's annotation overlay with the highlights state.
-  // We register every annotation once on `ready`, and re-register
-  // whenever the highlight list changes — the rendition's annotation
-  // API is idempotent on the same cfiRange, but to be safe we tear
-  // down the previous batch first.
+  // Sync the rendition's annotation overlay with the highlights state by
+  // diffing against what's already registered — adding one highlight to a
+  // heavily-annotated book touches one annotation, not all of them. The
+  // cleanup map is emptied when the rendition is destroyed, which makes a
+  // fresh rendition re-register everything.
   useEffect(() => {
     const rendition = renditionRef.current;
     if (!rendition || !ready) return;
-    // Clear stale annotations.
-    for (const cleanup of annotationCleanup.current.values()) {
-      try {
-        cleanup();
-      } catch {
-        /* ignore */
+    const registered = annotationCleanup.current;
+    const wanted = new Set(highlights.map((h) => h.uuid));
+
+    for (const [uuid, cleanup] of [...registered]) {
+      if (!wanted.has(uuid)) {
+        try {
+          cleanup();
+        } catch {
+          /* ignore */
+        }
+        registered.delete(uuid);
       }
     }
-    annotationCleanup.current.clear();
 
     for (const h of highlights) {
+      if (registered.has(h.uuid)) continue;
       const color = HIGHLIGHT_COLORS[h.color] ?? HIGHLIGHT_COLORS[DEFAULT_HIGHLIGHT_COLOR]!;
       try {
         rendition.annotations.add(
@@ -324,7 +384,7 @@ export function Reader({ book, onClose, standalone = false }: Props) {
           `atlas-hl atlas-hl-${h.color}`,
           { fill: color, "fill-opacity": "1", "mix-blend-mode": "multiply" },
         );
-        annotationCleanup.current.set(h.uuid, () => {
+        registered.set(h.uuid, () => {
           try {
             rendition.annotations.remove(h.cfi_range, "highlight");
           } catch {
@@ -424,6 +484,34 @@ export function Reader({ book, onClose, standalone = false }: Props) {
   const next = useCallback(() => renditionRef.current?.next(), []);
   const prev = useCallback(() => renditionRef.current?.prev(), []);
 
+  const jumpToToc = useCallback((href: string) => {
+    try {
+      renditionRef.current?.display(href);
+    } catch {
+      /* ignore */
+    }
+    setTocOpen(false);
+  }, []);
+
+  /** Click-to-seek on the footer progress bar. Needs locations. */
+  const seekTo = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!locReady) return;
+      const epubBook = bookRef.current;
+      const rendition = renditionRef.current;
+      if (!epubBook || !rendition) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+      try {
+        const cfi = epubBook.locations.cfiFromPercentage(frac);
+        if (cfi) rendition.display(cfi);
+      } catch {
+        /* ignore */
+      }
+    },
+    [locReady]
+  );
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target as HTMLElement | null;
@@ -507,6 +595,14 @@ export function Reader({ book, onClose, standalone = false }: Props) {
           >
             <Plus size={14} strokeWidth={2.2} />
           </button>
+          <button
+            className={`icon-btn ${tocOpen ? "active" : ""}`}
+            onClick={() => setTocOpen((v) => !v)}
+            disabled={toc.length === 0}
+            title="Table of contents"
+          >
+            <List size={14} strokeWidth={2} />
+          </button>
           <Popover
             align="end"
             trigger={
@@ -581,7 +677,20 @@ export function Reader({ book, onClose, standalone = false }: Props) {
         </div>
       </header>
       <div className="reader-stage">
-        {!ready && <div className="reader-loading">Opening…</div>}
+        {!ready && !loadError && <div className="reader-loading">Opening…</div>}
+        {loadError && (
+          <div className="reader-error" role="alert">
+            <h3>Couldn't open this book</h3>
+            <p className="reader-error-detail">{loadError}</p>
+            <p className="reader-error-hint">
+              The EPUB may be corrupt or DRM-protected. Try re-importing it,
+              or open the file in another reader to check.
+            </p>
+            <button className="primary" onClick={onClose}>
+              Back to library
+            </button>
+          </div>
+        )}
         {flow === "paginated" && (
           <button
             className="page-edge page-edge-left"
@@ -599,7 +708,14 @@ export function Reader({ book, onClose, standalone = false }: Props) {
         )}
       </div>
       <footer className="reader-foot">
-        <div className="progress-bar slim">
+        <div
+          className={`progress-bar slim ${locReady ? "seekable" : ""}`}
+          onClick={seekTo}
+          role={locReady ? "slider" : undefined}
+          aria-label={locReady ? "Reading position — click to jump" : undefined}
+          aria-valuenow={locReady ? Math.round(pct) : undefined}
+          title={locReady ? "Click to jump" : undefined}
+        >
           <div
             className="progress-fill"
             style={{ width: `${Math.min(100, pct)}%` }}
@@ -637,7 +753,85 @@ export function Reader({ book, onClose, standalone = false }: Props) {
           onClose={() => setPanelOpen(false)}
         />
       )}
+
+      {tocOpen && (
+        <TocPanel
+          toc={toc}
+          currentChapter={chapter}
+          onJump={jumpToToc}
+          onClose={() => setTocOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+interface TocEntry {
+  label: string;
+  href: string;
+  depth: number;
+}
+
+/** epub.js NavItems nest via `subitems`; flatten with a depth so the panel
+ *  can indent without recursion in JSX. */
+function flattenToc(
+  items: { label?: string; href: string; subitems?: unknown }[],
+  depth = 0
+): TocEntry[] {
+  const out: TocEntry[] = [];
+  for (const item of items) {
+    out.push({ label: (item.label ?? "").trim() || "Untitled", href: item.href, depth });
+    const subs = item.subitems;
+    if (Array.isArray(subs) && subs.length) {
+      out.push(...flattenToc(subs, depth + 1));
+    }
+  }
+  return out;
+}
+
+function describeEpubError(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  return "The file could not be parsed as an EPUB.";
+}
+
+function TocPanel({
+  toc,
+  currentChapter,
+  onJump,
+  onClose,
+}: {
+  toc: TocEntry[];
+  currentChapter: string;
+  onJump: (href: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <aside className="hl-panel toc-panel" aria-label="Table of contents">
+      <header className="hl-panel-head">
+        <span className="hl-panel-title">Contents</span>
+        <button className="icon-btn" onClick={onClose} title="Close panel">
+          <X size={13} strokeWidth={2.4} />
+        </button>
+      </header>
+      {toc.length === 0 ? (
+        <div className="hl-panel-empty">This book has no table of contents.</div>
+      ) : (
+        <ul className="hl-list toc-list">
+          {toc.map((t, i) => (
+            <li key={`${t.href}-${i}`}>
+              <button
+                className={`toc-item ${t.label === currentChapter ? "active" : ""}`}
+                style={{ paddingLeft: `${14 + t.depth * 14}px` }}
+                onClick={() => onJump(t.href)}
+              >
+                {t.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </aside>
   );
 }
 

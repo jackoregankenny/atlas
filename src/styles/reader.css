@@ -308,3 +308,71 @@
 @media (prefers-reduced-motion: reduce) {
   .hl-bar, .hl-panel, .reader-ctx { animation: none; }
 }
+
+/* ===== Reader: load-failure state ===== */
+.reader-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 40px;
+  z-index: 3;
+}
+.reader-error h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+.reader-error-detail {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  max-width: 480px;
+  word-break: break-word;
+  margin: 0;
+}
+.reader-error-hint {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  max-width: 380px;
+  margin: 0 0 10px;
+}
+
+/* ===== Reader: seekable progress bar ===== */
+.reader-foot .progress-bar.seekable {
+  cursor: pointer;
+}
+.reader-foot .progress-bar.seekable:hover {
+  transform: scaleY(1.8);
+}
+.reader-foot .progress-bar {
+  transition: transform 0.15s var(--ease);
+}
+
+/* ===== Reader: TOC panel ===== */
+.toc-list {
+  padding: 4px 0;
+}
+.toc-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  border-radius: 6px;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.toc-item:hover {
+  background: var(--hover-wash);
+  color: var(--text);
+}
+.toc-item.active {
+  color: var(--accent);
+  font-weight: 550;
+}
