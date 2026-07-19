@@ -325,10 +325,18 @@ async fn openlibrary_by_isbn(
             body
         }
     };
-    let v: serde_json::Value = serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+    Ok(Some(parse_ol_edition(&body, &clean)))
+}
+
+/// Pure parse of an Open Library edition record (`/isbn/X.json`). Always
+/// returns a Candidate carrying at least the ISBN (and a synthesized cover
+/// URL); the network/IO lives in the caller so this stays unit-testable
+/// against captured fixtures.
+fn parse_ol_edition(body: &str, clean_isbn: &str) -> Candidate {
+    let v: serde_json::Value = serde_json::from_str(body).unwrap_or(serde_json::Value::Null);
 
     let mut c = Candidate {
-        isbn: Some(clean.clone()),
+        isbn: Some(clean_isbn.to_string()),
         ..Default::default()
     };
 
@@ -351,7 +359,7 @@ async fn openlibrary_by_isbn(
         }
     }
     if c.cover_url.is_none() {
-        c.cover_url = Some(format!("https://covers.openlibrary.org/b/isbn/{}-L.jpg", clean));
+        c.cover_url = Some(format!("https://covers.openlibrary.org/b/isbn/{}-L.jpg", clean_isbn));
     }
     if let Some(works) = v.get("works").and_then(|x| x.as_array()) {
         if let Some(first) = works.first() {
@@ -360,7 +368,7 @@ async fn openlibrary_by_isbn(
             }
         }
     }
-    Ok(Some(c))
+    c
 }
 
 #[derive(Debug, Deserialize)]
@@ -411,13 +419,14 @@ async fn openlibrary_search(
             body
         }
     };
-    let parsed: OlSearch = match serde_json::from_str(&body) {
-        Ok(v) => v,
-        Err(_) => return Ok(None),
-    };
-    let Some(doc) = parsed.docs.into_iter().next() else {
-        return Ok(None);
-    };
+    Ok(parse_ol_search(&body))
+}
+
+/// Pure parse of an Open Library search response. Maps the first doc to a
+/// Candidate, or None if the body is unparseable or has no docs.
+fn parse_ol_search(body: &str) -> Option<Candidate> {
+    let parsed: OlSearch = serde_json::from_str(body).ok()?;
+    let doc = parsed.docs.into_iter().next()?;
     let isbn = doc
         .isbn
         .as_ref()
@@ -427,7 +436,7 @@ async fn openlibrary_search(
         .map(|id| format!("https://covers.openlibrary.org/b/id/{}-L.jpg", id))
         .or_else(|| isbn.as_ref().map(|i| format!("https://covers.openlibrary.org/b/isbn/{}-L.jpg", i)));
 
-    Ok(Some(Candidate {
+    Some(Candidate {
         isbn,
         pub_date: doc.first_publish_year.map(|y| y.to_string()),
         language: doc.language.and_then(|xs| xs.into_iter().next()),
@@ -435,7 +444,7 @@ async fn openlibrary_search(
         work_key: doc.key,
         description: doc.first_sentence.and_then(|xs| xs.into_iter().next()),
         subjects: doc.subject.unwrap_or_default(),
-    }))
+    })
 }
 
 async fn openlibrary_work(
@@ -458,7 +467,13 @@ async fn openlibrary_work(
             body
         }
     };
-    let v: serde_json::Value = serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+    Ok(Some(parse_ol_work(&body)))
+}
+
+/// Pure parse of an Open Library work record. `description` arrives either as
+/// a plain string or as a `{ value, type }` object — both forms are handled.
+fn parse_ol_work(body: &str) -> Candidate {
+    let v: serde_json::Value = serde_json::from_str(body).unwrap_or(serde_json::Value::Null);
 
     let description = match v.get("description") {
         // Plain string
@@ -479,11 +494,11 @@ async fn openlibrary_work(
         })
         .unwrap_or_default();
 
-    Ok(Some(Candidate {
+    Candidate {
         description,
         subjects,
         ..Default::default()
-    }))
+    }
 }
 
 // ───────── Google Books fallback ─────────
@@ -559,19 +574,16 @@ async fn google_books(
             body
         }
     };
-    let parsed: GbResp = match serde_json::from_str(&body) {
-        Ok(v) => v,
-        Err(_) => return Ok(None),
-    };
-    let Some(items) = parsed.items else {
-        return Ok(None);
-    };
-    let Some(item) = items.into_iter().next() else {
-        return Ok(None);
-    };
-    let Some(info) = item.volume_info else {
-        return Ok(None);
-    };
+    Ok(parse_google_books(&body))
+}
+
+/// Pure parse of a Google Books volumes response. Prefers an ISBN-13, falls
+/// back to ISBN-10, and normalizes the thumbnail URL (http→https, drops the
+/// `edge=curl` param that curls the cover art).
+fn parse_google_books(body: &str) -> Option<Candidate> {
+    let parsed: GbResp = serde_json::from_str(body).ok()?;
+    let item = parsed.items?.into_iter().next()?;
+    let info = item.volume_info?;
 
     let isbn_out = info
         .industry_identifiers
@@ -583,8 +595,6 @@ async fn google_books(
                 .map(|x| x.identifier.clone())
         });
 
-    // Google Books thumbnails come over http and have edge=curl which makes
-    // them look weirdly curled — strip both.
     let cover_url = info.image_links.and_then(|i| i.thumbnail.or(i.small_thumbnail)).map(|u| {
         u.replace("http://", "https://")
             .replace("&edge=curl", "")
@@ -592,7 +602,7 @@ async fn google_books(
             .replace("edge=curl", "")
     });
 
-    Ok(Some(Candidate {
+    Some(Candidate {
         isbn: isbn_out,
         description: info.description,
         pub_date: info.published_date,
@@ -600,7 +610,7 @@ async fn google_books(
         cover_url,
         subjects: info.categories.unwrap_or_default(),
         work_key: None,
-    }))
+    })
 }
 
 // ───────── covers & cache ─────────
@@ -886,4 +896,205 @@ fn cache_put(pool: &DbPool, key: &str, source: &str, payload: &str) -> Result<()
         rusqlite::params![key, source, payload],
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ───────── pure helpers ─────────
+
+    #[test]
+    fn title_case_capitalizes_each_word() {
+        assert_eq!(title_case("science fiction"), "Science Fiction");
+        assert_eq!(title_case("FANTASY"), "Fantasy");
+        assert_eq!(title_case("war and peace"), "War And Peace");
+        assert_eq!(title_case(""), "");
+    }
+
+    #[test]
+    fn clean_subjects_filters_noise_and_caps_count() {
+        let subjects = vec![
+            "Fantasy".to_string(),
+            "Fiction -- General".to_string(),        // qualified (--) → dropped
+            "NYT:bestseller".to_string(),             // noisy prefix → dropped
+            "PROTECTED DAISY".to_string(),            // all-caps noise → dropped
+            "this-subject-is-far-too-long-to-be-a-tag".to_string(), // > TAG_MAX_LEN → dropped
+            "Adventure".to_string(),
+            "Dragons".to_string(),
+            "Heroes".to_string(),
+            "Magic".to_string(),
+            "Quests".to_string(),
+            "Middle Earth".to_string(),              // would exceed MAX_AUTO_TAGS
+        ];
+        let tags = clean_subjects_to_tags(&subjects, &[]);
+        assert!(tags.contains(&"Fantasy".to_string()));
+        assert!(tags.contains(&"Adventure".to_string()));
+        assert!(!tags.iter().any(|t| t.contains("--")));
+        assert!(!tags.iter().any(|t| t.to_lowercase().contains("nyt")));
+        assert!(!tags.iter().any(|t| t.chars().all(|c| c.is_ascii_uppercase() || c == ' ')));
+        assert!(tags.len() <= MAX_AUTO_TAGS, "got {} tags", tags.len());
+    }
+
+    #[test]
+    fn clean_subjects_skips_existing_case_insensitively() {
+        let subjects = vec!["Fantasy".to_string(), "Adventure".to_string()];
+        let existing = vec!["fantasy".to_string()];
+        let tags = clean_subjects_to_tags(&subjects, &existing);
+        assert!(!tags.iter().any(|t| t.eq_ignore_ascii_case("fantasy")));
+        assert!(tags.contains(&"Adventure".to_string()));
+    }
+
+    #[test]
+    fn merge_only_fills_empty_fields() {
+        let mut into = Candidate {
+            isbn: Some("111".into()),
+            description: Some("original".into()),
+            ..Default::default()
+        };
+        let other = Candidate {
+            isbn: Some("999".into()),
+            description: None,
+            pub_date: Some("2001".into()),
+            subjects: vec!["A".into()],
+            ..Default::default()
+        };
+        merge(&mut into, other);
+        assert_eq!(into.isbn.as_deref(), Some("111")); // existing kept
+        assert_eq!(into.description.as_deref(), Some("original")); // existing kept
+        assert_eq!(into.pub_date.as_deref(), Some("2001")); // empty filled
+        assert_eq!(into.subjects, vec!["A".to_string()]);
+    }
+
+    #[test]
+    fn merge_dedupes_subjects() {
+        let mut into = Candidate { subjects: vec!["A".into(), "B".into()], ..Default::default() };
+        let other = Candidate { subjects: vec!["B".into(), "C".into()], ..Default::default() };
+        merge(&mut into, other);
+        assert_eq!(into.subjects, vec!["A".to_string(), "B".into(), "C".into()]);
+    }
+
+    // ───────── Open Library edition (/isbn/X.json) ─────────
+
+    #[test]
+    fn parse_ol_edition_extracts_all_fields() {
+        let body = r#"{
+            "publish_date": "1937",
+            "languages": [{"key": "/languages/eng"}],
+            "covers": [12003329, -1],
+            "works": [{"key": "/works/OL27482W"}]
+        }"#;
+        let c = parse_ol_edition(body, "9780547928227");
+        assert_eq!(c.isbn.as_deref(), Some("9780547928227"));
+        assert_eq!(c.pub_date.as_deref(), Some("1937"));
+        assert_eq!(c.language.as_deref(), Some("eng"));
+        assert_eq!(
+            c.cover_url.as_deref(),
+            Some("https://covers.openlibrary.org/b/id/12003329-L.jpg")
+        );
+        assert_eq!(c.work_key.as_deref(), Some("/works/OL27482W"));
+    }
+
+    #[test]
+    fn parse_ol_edition_falls_back_to_isbn_cover_when_no_cover_id() {
+        let c = parse_ol_edition(r#"{"covers": []}"#, "123X");
+        assert_eq!(
+            c.cover_url.as_deref(),
+            Some("https://covers.openlibrary.org/b/isbn/123X-L.jpg")
+        );
+    }
+
+    #[test]
+    fn parse_ol_edition_tolerates_garbage_body() {
+        let c = parse_ol_edition("<<not json>>", "999");
+        assert_eq!(c.isbn.as_deref(), Some("999"));
+        assert!(c.cover_url.unwrap().contains("/isbn/999-")); // still synthesized
+    }
+
+    // ───────── Open Library search (/search.json) ─────────
+
+    #[test]
+    fn parse_ol_search_maps_first_doc() {
+        let body = r#"{"docs":[
+            {"key":"/works/OL27482W","first_publish_year":1937,"language":["eng"],
+             "isbn":["x","9780547928227"],"cover_i":14627509,
+             "subject":["Fantasy","Adventure"],"first_sentence":["In a hole in the ground."]}
+        ]}"#;
+        let c = parse_ol_search(body).expect("a candidate");
+        assert_eq!(c.work_key.as_deref(), Some("/works/OL27482W"));
+        assert_eq!(c.pub_date.as_deref(), Some("1937"));
+        assert_eq!(c.language.as_deref(), Some("eng"));
+        assert_eq!(c.isbn.as_deref(), Some("9780547928227")); // only 13/10-digit accepted
+        assert_eq!(
+            c.cover_url.as_deref(),
+            Some("https://covers.openlibrary.org/b/id/14627509-L.jpg")
+        );
+        assert_eq!(c.description.as_deref(), Some("In a hole in the ground."));
+        assert_eq!(c.subjects, vec!["Fantasy".to_string(), "Adventure".into()]);
+    }
+
+    #[test]
+    fn parse_ol_search_none_on_empty_or_garbage() {
+        assert!(parse_ol_search(r#"{"docs":[]}"#).is_none());
+        assert!(parse_ol_search("not json").is_none());
+    }
+
+    // ───────── Open Library work — the drift-prone description branch ─────────
+
+    #[test]
+    fn parse_ol_work_handles_object_description() {
+        let body = r#"{"description":{"value":"A tale of a hobbit.","type":"/type/text"},
+                        "subjects":["Fantasy","Dragons"]}"#;
+        let c = parse_ol_work(body);
+        assert_eq!(c.description.as_deref(), Some("A tale of a hobbit."));
+        assert_eq!(c.subjects.len(), 2);
+    }
+
+    #[test]
+    fn parse_ol_work_handles_string_description() {
+        let c = parse_ol_work(r#"{"description":"Plain string form.","subjects":[]}"#);
+        assert_eq!(c.description.as_deref(), Some("Plain string form."));
+        assert!(c.subjects.is_empty());
+    }
+
+    #[test]
+    fn parse_ol_work_missing_description_is_none() {
+        let c = parse_ol_work(r#"{"subjects":["X"]}"#);
+        assert!(c.description.is_none());
+        assert_eq!(c.subjects, vec!["X".to_string()]);
+    }
+
+    // ───────── Google Books (/volumes) ─────────
+
+    #[test]
+    fn parse_google_books_prefers_isbn13_and_cleans_cover_url() {
+        let body = r#"{"items":[{"volumeInfo":{
+            "description":"GB description.",
+            "publishedDate":"1937-09-21",
+            "language":"en",
+            "categories":["Fiction"],
+            "imageLinks":{"thumbnail":"http://books.google.com/books?id=abc&edge=curl"},
+            "industryIdentifiers":[
+                {"type":"ISBN_10","identifier":"0547928211"},
+                {"type":"ISBN_13","identifier":"9780547928227"}
+            ]
+        }}]}"#;
+        let c = parse_google_books(body).expect("a candidate");
+        assert_eq!(c.description.as_deref(), Some("GB description."));
+        assert_eq!(c.pub_date.as_deref(), Some("1937-09-21"));
+        assert_eq!(c.language.as_deref(), Some("en"));
+        assert_eq!(c.isbn.as_deref(), Some("9780547928227")); // ISBN_13 preferred over 10
+        assert_eq!(
+            c.cover_url.as_deref(),
+            Some("https://books.google.com/books?id=abc") // https + edge=curl stripped
+        );
+        assert_eq!(c.subjects, vec!["Fiction".to_string()]);
+    }
+
+    #[test]
+    fn parse_google_books_none_on_empty_items() {
+        assert!(parse_google_books(r#"{"items":[]}"#).is_none());
+        assert!(parse_google_books(r#"{}"#).is_none());
+        assert!(parse_google_books("garbage").is_none());
+    }
 }

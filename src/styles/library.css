@@ -161,6 +161,59 @@
   width: 100px;
 }
 
+/* ===== Missing-covers nudge ===== */
+.enrich-nudge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 22px 0;
+  padding: 9px 10px 9px 13px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--r-md);
+  font-size: 12.5px;
+  animation: nudge-in var(--t-slow) var(--ease-out);
+}
+@keyframes nudge-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .enrich-nudge { animation: none; }
+}
+.enrich-nudge-icon { color: var(--accent); flex-shrink: 0; }
+.enrich-nudge-text { color: var(--text-dim); }
+.enrich-nudge-action {
+  margin-left: auto;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: filter var(--t-base) var(--ease);
+}
+.enrich-nudge-action:hover { filter: brightness(1.08); }
+.enrich-nudge-dismiss {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--t-base) var(--ease), color var(--t-base) var(--ease);
+}
+.enrich-nudge-dismiss:hover { background: var(--hover-wash); color: var(--text); }
+
 .view-switch {
   display: inline-flex;
   background: var(--panel);

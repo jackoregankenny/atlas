@@ -111,6 +111,8 @@ function MainApp() {
     currentPath: string | null;
   } | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
+  // Guards the one-time "device connected" teaching toast (see effect below).
+  const deviceNudgeShown = useRef(false);
 
   const { toasts, push: pushToast, dismiss: dismissToast } = useToasts();
   const { theme, setTheme, cycle: cycleTheme, accent, setAccent } = useTheme();
@@ -126,8 +128,15 @@ function MainApp() {
   const selection = useSelection();
   const { selectedIds, toggleSelect, clearSelection } = selection;
   const enrichment = useEnrichment(books, refresh, pushToast);
-  const { enrichingIds, batchJob, onEnrich, onEnrichAllMissing, runBatch, cancelBatch } =
-    enrichment;
+  const {
+    enrichingIds,
+    batchJob,
+    missingCount,
+    onEnrich,
+    onEnrichAllMissing,
+    runBatch,
+    cancelBatch,
+  } = enrichment;
   const preview = useDetailPreview(books);
   const { setSelectedId, previewId, previewBook, onHover, clearCache } = preview;
   const updater = useUpdater(pushToast);
@@ -166,6 +175,26 @@ function MainApp() {
       cancelled = true;
     };
   }, []);
+
+  // One-time teaching nudge the first time an e-reader is detected. Devices
+  // are polled and come/go as they're plugged in; we announce the send-to-
+  // device capability only once per machine, then never nag again.
+  useEffect(() => {
+    if (deviceNudgeShown.current || devices.length === 0) return;
+    deviceNudgeShown.current = true;
+    if (localStorage.getItem("atlas-device-nudge-seen")) return;
+    const d = devices[0]!;
+    pushToast(
+      "info",
+      `${d.name} connected — right-click any book to send it over.`,
+      8000
+    );
+    try {
+      localStorage.setItem("atlas-device-nudge-seen", "1");
+    } catch {
+      /* private mode / quota — nudge just won't be remembered as seen */
+    }
+  }, [devices, pushToast]);
 
   // Export every highlight in the library to a Markdown file the user
   // picks via the save dialog. Same logic the File → Export Highlights
@@ -410,6 +439,7 @@ function MainApp() {
             batchJob={batchJob}
             onCancelBatch={cancelBatch}
             onEnrichAllMissing={onEnrichAllMissing}
+            missingCount={missingCount}
             enrichingIds={enrichingIds}
             onOpen={setSelectedId}
             onHover={onHover}

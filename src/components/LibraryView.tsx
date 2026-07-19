@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -37,6 +38,8 @@ export interface LibraryViewProps {
   batchJob: EnrichJob | null;
   onCancelBatch: () => void;
   onEnrichAllMissing: () => void;
+  /** Count of books with no cover or no author, across the whole library. */
+  missingCount: number;
   enrichingIds: Set<number>;
   onOpen: (id: number) => void;
   onHover: (id: number | null) => void;
@@ -87,6 +90,7 @@ export function LibraryView({
   batchJob,
   onCancelBatch,
   onEnrichAllMissing,
+  missingCount,
   enrichingIds,
   onOpen,
   onHover,
@@ -198,6 +202,9 @@ export function LibraryView({
           />
         </div>
       </header>
+      {!hasActiveFilter && books.length > 0 && !batchJob && (
+        <MissingCoversNudge count={missingCount} onEnrich={onEnrichAllMissing} />
+      )}
       {books.length === 0 ? (
         !loaded ? (
           <SkeletonGrid compact={prefs.view === "compact"} />
@@ -482,6 +489,65 @@ function FilterPill({ label, onClear }: { label: string; onClear: () => void }) 
       <span>{label}</span>
       <X size={11} strokeWidth={2.4} />
     </button>
+  );
+}
+
+const NUDGE_MIN = 3;
+const NUDGE_KEY = "atlas-enrich-nudge-dismissed-at";
+
+/** Quiet, dismissible banner that surfaces batch enrichment when a chunk of
+ *  the library is missing covers or authors — the discoverability counterpart
+ *  to the topbar Enrich button. Dismissing it records the current missing
+ *  count; it only resurfaces if that count later grows (e.g. a fresh import of
+ *  cover-less EPUBs). Successful enrichment shrinks the count and hides it. */
+function MissingCoversNudge({
+  count,
+  onEnrich,
+}: {
+  count: number;
+  onEnrich: () => void;
+}) {
+  const [dismissedAt, setDismissedAt] = useState<number>(() => {
+    const v = Number(localStorage.getItem(NUDGE_KEY));
+    return Number.isFinite(v) ? v : 0;
+  });
+  if (count < NUDGE_MIN || count <= dismissedAt) return null;
+  // Record the count at which the user last acknowledged the nudge — whether
+  // by dismissing or by enriching. It only resurfaces if the missing set
+  // later grows past this mark (a fresh import), not for the handful of books
+  // that simply had no remote match.
+  const acknowledge = () => {
+    setDismissedAt(count);
+    try {
+      localStorage.setItem(NUDGE_KEY, String(count));
+    } catch {
+      /* private mode / quota — banner just won't persist its dismissal */
+    }
+  };
+  return (
+    <div className="enrich-nudge" role="status">
+      <Sparkles size={14} strokeWidth={2} className="enrich-nudge-icon" />
+      <span className="enrich-nudge-text">
+        {count} books are missing covers or author info.
+      </span>
+      <button
+        className="enrich-nudge-action"
+        onClick={() => {
+          acknowledge();
+          onEnrich();
+        }}
+      >
+        Enrich all
+      </button>
+      <button
+        className="enrich-nudge-dismiss"
+        onClick={acknowledge}
+        title="Dismiss"
+        aria-label="Dismiss"
+      >
+        <X size={12} strokeWidth={2.4} />
+      </button>
+    </div>
   );
 }
 

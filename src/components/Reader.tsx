@@ -37,6 +37,10 @@ const HIGHLIGHT_COLORS: Record<string, string> = {
 };
 const DEFAULT_HIGHLIGHT_COLOR = "yellow";
 
+// First-open reading tips. Flag is shared across every book and the pop-out
+// window, so the coachmark is shown exactly once per machine.
+const READER_HINTS_KEY = "atlas-reader-hints-seen";
+
 type Theme = "dark" | "sepia" | "light";
 type Flow = "paginated" | "scrolled-doc";
 type FontChoice = "default" | "serif" | "sans" | "mono";
@@ -99,6 +103,8 @@ export function Reader({ book, onClose, standalone = false }: Props) {
   // diverge. Loaded once on book mount and then mutated optimistically.
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
+  // First-open coachmark — surfaced once the first book actually renders.
+  const [showHints, setShowHints] = useState(false);
   // Pending selection awaiting "Highlight" confirmation.
   const [pending, setPending] = useState<{
     cfiRange: string;
@@ -570,6 +576,23 @@ export function Reader({ book, onClose, standalone = false }: Props) {
     }
   }, [book.id, book.title, onClose]);
 
+  // Surface the first-run reading tips once the book is on screen. The flag
+  // guard means it never re-appears after the user has dismissed it once.
+  useEffect(() => {
+    if (ready && !loadError && !localStorage.getItem(READER_HINTS_KEY)) {
+      setShowHints(true);
+    }
+  }, [ready, loadError]);
+
+  const dismissHints = useCallback(() => {
+    setShowHints(false);
+    try {
+      localStorage.setItem(READER_HINTS_KEY, "1");
+    } catch {
+      /* private mode / quota — tips just won't be remembered as seen */
+    }
+  }, []);
+
   return (
     <div className={`reader reader-${theme} reader-flow-${flow}`}>
       <header className="reader-bar">
@@ -762,6 +785,67 @@ export function Reader({ book, onClose, standalone = false }: Props) {
           onClose={() => setTocOpen(false)}
         />
       )}
+
+      {showHints && <ReaderHints onClose={dismissHints} />}
+    </div>
+  );
+}
+
+/** One-time first-open coachmark. Teaches the three things a new reader
+ *  can't discover by looking: how to turn pages, that selecting text
+ *  highlights, and that the top bar holds typography/theme/contents. */
+function ReaderHints({ onClose }: { onClose: () => void }) {
+  // Capture Escape ahead of the reader's own window handler so the first
+  // Esc dismisses the tips rather than closing the whole reader.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
+  return (
+    <div className="reader-hints-scrim" onClick={onClose}>
+      <div
+        className="reader-hints"
+        role="dialog"
+        aria-label="Reading tips"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="reader-hints-title">A few ways to read</h3>
+        <ul className="reader-hints-list">
+          <li>
+            <span className="reader-hints-keys">
+              <kbd className="kbd">←</kbd>
+              <kbd className="kbd">→</kbd>
+              <kbd className="kbd">Space</kbd>
+            </span>
+            <span>Turn pages — or click the left and right edges.</span>
+          </li>
+          <li>
+            <span className="reader-hints-icon">
+              <Highlighter size={15} strokeWidth={2} />
+            </span>
+            <span>Select any text to highlight it; right-click for copy &amp; look-up.</span>
+          </li>
+          <li>
+            <span className="reader-hints-icon">
+              <Type size={15} strokeWidth={2} />
+            </span>
+            <span>The top bar sets text size, typeface, theme, and contents.</span>
+          </li>
+        </ul>
+        <div className="reader-hints-foot">
+          <button className="primary reader-hints-dismiss" onClick={onClose}>
+            Got it
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

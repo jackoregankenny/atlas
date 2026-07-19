@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { enrichBook, setTaskbarProgress } from "../api";
 import type { Book } from "../types";
 import { startEnrichBatch, type EnrichJob } from "../enrichPool";
@@ -81,18 +81,33 @@ export function useEnrichment(
     [refresh, pushToast]
   );
 
+  // A book is "incomplete" if it has no cover or no author — the same set
+  // the topbar Enrich button and the missing-covers nudge both target.
+  const missingTargets = useMemo(
+    () => books.filter((b) => !b.cover_path || b.authors.length === 0),
+    [books]
+  );
+  const missingCount = missingTargets.length;
+
   const onEnrichAllMissing = useCallback(() => {
-    const targets = books.filter((b) => !b.cover_path || b.authors.length === 0);
-    if (targets.length === 0) {
+    if (missingTargets.length === 0) {
       pushToast("info", "Everything already has covers and authors");
       return;
     }
-    runBatch(targets.map((b) => b.id));
-  }, [books, runBatch, pushToast]);
+    runBatch(missingTargets.map((b) => b.id));
+  }, [missingTargets, runBatch, pushToast]);
 
   const cancelBatch = useCallback(() => {
     batchHandleRef.current?.cancel();
   }, []);
 
-  return { enrichingIds, batchJob, onEnrich, onEnrichAllMissing, runBatch, cancelBatch };
+  return {
+    enrichingIds,
+    batchJob,
+    missingCount,
+    onEnrich,
+    onEnrichAllMissing,
+    runBatch,
+    cancelBatch,
+  };
 }
